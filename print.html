@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PLT CSR Dashboard Print</title>
+    <style>
+      body { font-family: Arial, sans-serif; color: #111; margin: 24px; }
+      h1, h2 { margin: 0 0 12px; }
+      .controls { margin-bottom: 16px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+      th { background: #f5f5f5; }
+      .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+      .yes { background: #d9fbe5; color: #0f5132; }
+      .no { background: #fbe3e3; color: #842029; }
+      @media print {
+        .controls { display: none; }
+        body { margin: 0.5in; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PLT CSR Dashboard — Print View</h1>
+    <div class="controls">
+      <label>
+        View:
+        <select id="print-mode">
+          <option value="checklist">Daily Checklist</option>
+          <option value="competitions">Competitions Standings</option>
+        </select>
+      </label>
+      <button onclick="window.print()">Print</button>
+    </div>
+
+    <section id="print-content">Loading...</section>
+
+    <script>
+      function apiCall(name, args) {
+        return new Promise(function(resolve, reject) {
+          var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          if (args && args.length) {
+            runner[name].apply(runner, args);
+          } else {
+            runner[name]();
+          }
+        });
+      }
+
+      function renderChecklist(data) {
+        var rows = data.items.map(function(item) {
+          return '<tr><td>' + item.task + '</td><td><span class="badge ' + (item.completed ? 'yes">Completed' : 'no">Open') + '</span></td><td>' + (item.completedBy || '-') + '</td></tr>';
+        }).join('');
+        return '<h2>Daily Checklist (' + data.store + ' - ' + data.date + ')</h2><table><thead><tr><th>Task</th><th>Status</th><th>Completed By</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      }
+
+      function renderCompetitions(data) {
+        var blocks = data.leaders.map(function(metricObj) {
+          var rows = metricObj.entries.map(function(entry) {
+            return '<tr><td>' + entry.csrName + '</td><td>' + entry.store + '</td><td>' + entry.value + '</td></tr>';
+          }).join('');
+          return '<h2>' + metricObj.metric + '</h2><table><thead><tr><th>CSR</th><th>Store</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        }).join('');
+        return '<h2>Competitions Standings</h2>' + blocks;
+      }
+
+      async function loadPrintContent() {
+        var mode = document.getElementById('print-mode').value;
+        var target = document.getElementById('print-content');
+        target.innerHTML = 'Loading...';
+        try {
+          if (mode === 'checklist') {
+            var now = new Date().toISOString().slice(0, 10);
+            var data = await apiCall('getChecklist', [now, 'Dublin']);
+            target.innerHTML = renderChecklist(data);
+          } else {
+            var comp = await apiCall('getCompetitionsData');
+            target.innerHTML = renderCompetitions(comp);
+          }
+        } catch (err) {
+          target.innerHTML = 'Unable to load print data.';
+        }
+      }
+
+      document.getElementById('print-mode').addEventListener('change', loadPrintContent);
+      loadPrintContent();
+    </script>
+  </body>
+</html>

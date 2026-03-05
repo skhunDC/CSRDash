@@ -1,0 +1,247 @@
+<script>
+  const state = {
+    user: null,
+    activeTab: 'dashboard',
+    storeFilter: 'All',
+    dateSelected: new Date().toISOString().slice(0, 10),
+    dashboardData: null,
+    competitionsData: null,
+    checklistData: null,
+    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Dublin', 'Pleasanton', 'San Ramon'] }
+  };
+
+  const api = {
+    call(name, args = []) {
+      return new Promise((resolve, reject) => {
+        const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        runner[name](...args);
+      });
+    },
+    getAuthStatus() { return this.call('getAuthStatus'); },
+    getClientConfig() { return this.call('getClientConfig'); },
+    getDashboardData() { return this.call('getDashboardData'); },
+    getCompetitionsData() { return this.call('getCompetitionsData'); },
+    saveCompetitionEntry(payload) { return this.call('saveCompetitionEntry', [payload]); },
+    getChecklist(date, store) { return this.call('getChecklist', [date, store]); },
+    setChecklistItem(payload) { return this.call('setChecklistItem', [payload]); }
+  };
+
+  const fmtCurrency = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n || 0));
+  const fmtPercent = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
+
+  function toast(message) {
+    const node = document.getElementById('toast');
+    node.textContent = message;
+    node.classList.remove('hidden');
+    setTimeout(() => node.classList.add('hidden'), 3500);
+  }
+
+  function safeRun(fn) {
+    return fn().catch((err) => {
+      toast(err.message || 'Server error');
+      console.error(err);
+    });
+  }
+
+  function setupTabs() {
+    document.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        if (!tab) return;
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.activeTab = tab;
+        renderCurrentTab();
+      });
+    });
+  }
+
+  function renderDashboard(data) {
+    const stores = ['All'].concat(state.config.defaultStores || []);
+    const filteredOff = data.scheduleWeek.offList.filter((row) => state.storeFilter === 'All' || row.store === state.storeFilter);
+
+    const salesRows = data.salesComparison.map((row) => {
+      const growth = row.deltaPct >= 0;
+      const pctWidth = Math.min(100, Math.abs(row.deltaPct) * 100);
+      return `<tr><td>${row.store}</td><td class="number">${fmtCurrency(row.sales2025)}</td><td class="number">${fmtCurrency(row.sales2026)}</td><td class="number">${fmtCurrency(row.delta)} (${fmtPercent(row.deltaPct)})</td><td><span class="pill ${growth ? 'good' : 'warn'}">${growth ? 'Up' : 'Down'}</span><div class="bar-wrap"><div class="bar" style="width:${pctWidth}%;opacity:${growth ? '1' : '.45'}"></div></div></td></tr>`;
+    }).join('');
+
+    const perfRows = data.csrPerformanceYesterday.entries.map((row) => {
+      const isTop = data.csrPerformanceYesterday.topPerformer && data.csrPerformanceYesterday.topPerformer.csrName === row.csrName;
+      return `<tr><td>${row.csrName} ${isTop ? '🏆' : ''}</td><td>${row.store}</td><td class="number">${fmtCurrency(row.dollarsPerHour)}</td><td class="number">${fmtCurrency(row.sales)}</td><td class="number">${row.hours}</td></tr>`;
+    }).join('');
+
+    const offRows = filteredOff.map((row) => `<li>${row.date}: <strong>${row.csrName}</strong> (${row.store})</li>`).join('') || '<li>No one marked OFF for selected store this week.</li>';
+    const compCards = data.competitionsSnapshot.map((metric) => `<p><strong>${metric.metric}:</strong> ${metric.leader ? `${metric.leader.csrName} (${metric.leader.value})` : 'No entries'}</p>`).join('');
+
+    return `
+      <section class="grid">
+        <article class="card span-8">
+          <div class="card-head"><h2>Sales Week 2026 vs 2025</h2><span class="caption">Week of ${data.scheduleWeek.weekStart}</span></div>
+          <table><thead><tr><th>Store</th><th class="number">2025</th><th class="number">2026</th><th class="number">Delta</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
+        </article>
+
+        <article class="card span-4">
+          <h2>CSR of the Week</h2>
+          <p><strong>${data.csrOfWeek.csrName}</strong> — ${data.csrOfWeek.store}</p>
+          <p>“${data.csrOfWeek.quote}”</p>
+        </article>
+
+        <article class="card span-6">
+          <h2>CSR $/Hour (Yesterday)</h2>
+          <p>Goal: ${fmtCurrency(data.goalPerHour)}</p>
+          <table><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th></tr></thead><tbody>${perfRows}</tbody></table>
+        </article>
+
+        <article class="card span-6">
+          <div class="row"><h2>Weekly Schedule — Who's OFF</h2><select id="dash-store-filter">${stores.map((s) => `<option ${s === state.storeFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+          <p>${data.scheduleWeek.weekStart} → ${data.scheduleWeek.weekEnd}</p>
+          <ul>${offRows}</ul>
+        </article>
+
+        <article class="card span-6"><h2>Competitions Highlights</h2>${compCards}</article>
+
+        <article class="card span-6">
+          <h2>Cleaning Checklist Progress</h2>
+          <p>${data.checklistSnapshot.store} — ${data.checklistSnapshot.date}</p>
+          <p>${data.checklistSnapshot.completed} / ${data.checklistSnapshot.total} complete</p>
+          <div class="progress"><div style="width:${Math.round(data.checklistSnapshot.progress * 100)}%"></div></div>
+        </article>
+      </section>`;
+  }
+
+  function renderCompetitions(data) {
+    const metrics = [...new Set(data.rows.map((r) => r.metric))];
+    const csrOptions = [...new Set(data.rows.map((r) => r.csrName))].map((c) => `<option>${c}</option>`).join('');
+    const stores = state.config.defaultStores || ['Dublin', 'Pleasanton', 'San Ramon'];
+
+    const blocks = data.leaders.map((metricObj) => {
+      const rows = metricObj.entries.map((entry) => `<tr><td>${entry.csrName}</td><td>${entry.store}</td><td class="number">${entry.value}</td></tr>`).join('');
+      return `<article class="card span-4"><h2>${metricObj.metric}</h2><p>Leader: <strong>${metricObj.leader ? metricObj.leader.csrName : '-'}</strong></p><table><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th></tr></thead><tbody>${rows}</tbody></table></article>`;
+    }).join('');
+
+    return `
+      <section class="row">
+        <input id="comp-metric" list="metric-list" placeholder="Metric name (editable)" value="${metrics[0] || ''}" />
+        <datalist id="metric-list">${metrics.map((m) => `<option value="${m}">`).join('')}</datalist>
+        <select id="comp-store">${stores.map((s) => `<option>${s}</option>`).join('')}</select>
+        <select id="comp-csr">${csrOptions}</select>
+        <input id="comp-value" type="number" min="0" step="1" placeholder="Value" />
+        <button id="comp-save" class="tab active">Save Entry</button>
+      </section>
+      <section class="grid">${blocks}</section>`;
+  }
+
+  function renderChecklist(data) {
+    const stores = state.config.defaultStores || ['Dublin', 'Pleasanton', 'San Ramon'];
+    const items = data.items.map((item) => `<div class="check-item"><label>${item.task}</label><input data-task="${item.task}" class="check-toggle" type="checkbox" ${item.completed ? 'checked' : ''} /></div>`).join('');
+    const completed = data.items.filter((item) => item.completed).length;
+    const pct = data.items.length ? Math.round((completed / data.items.length) * 100) : 0;
+
+    return `<section class="card"><div class="row"><label>Date <input type="date" id="check-date" value="${data.date}" /></label><label>Store <select id="check-store">${stores.map((s) => `<option ${s === data.store ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button id="check-load" class="tab">Load</button><a class="tab" href="?page=print" target="_blank">Print View</a></div><h2>End of Day Checklist — ${data.store}</h2><p>${completed}/${data.items.length} complete</p><div class="progress"><div style="width:${pct}%"></div></div><div style="margin-top:12px">${items}</div></section>`;
+  }
+
+  async function loadDashboard() { state.dashboardData = await api.getDashboardData(); }
+  async function loadCompetitions() { state.competitionsData = await api.getCompetitionsData(); }
+  async function loadChecklist() {
+    const store = state.storeFilter === 'All' ? (state.config.defaultStores[0] || 'Dublin') : state.storeFilter;
+    state.checklistData = await api.getChecklist(state.dateSelected, store);
+  }
+
+  function bindDashboardActions() {
+    const select = document.getElementById('dash-store-filter');
+    if (!select) return;
+    select.addEventListener('change', () => {
+      state.storeFilter = select.value;
+      renderCurrentTab();
+    });
+  }
+
+  function bindCompetitionsActions() {
+    const btn = document.getElementById('comp-save');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      await safeRun(async () => {
+        const metric = document.getElementById('comp-metric').value.trim();
+        if (!metric) throw new Error('Metric name is required.');
+        await api.saveCompetitionEntry({
+          weekStart: state.dashboardData.scheduleWeek.weekStart,
+          metric,
+          store: document.getElementById('comp-store').value,
+          csrName: document.getElementById('comp-csr').value,
+          value: Number(document.getElementById('comp-value').value || 0)
+        });
+        await Promise.all([loadCompetitions(), loadDashboard()]);
+        renderCurrentTab();
+      });
+    });
+  }
+
+  function bindChecklistActions() {
+    const loadBtn = document.getElementById('check-load');
+    if (loadBtn) {
+      loadBtn.addEventListener('click', async () => {
+        state.dateSelected = document.getElementById('check-date').value;
+        state.storeFilter = document.getElementById('check-store').value;
+        await safeRun(async () => { await loadChecklist(); renderCurrentTab(); });
+      });
+    }
+    document.querySelectorAll('.check-toggle').forEach((cb) => {
+      cb.addEventListener('change', async () => {
+        await safeRun(async () => {
+          await api.setChecklistItem({ date: state.checklistData.date, store: state.checklistData.store, task: cb.dataset.task, completed: cb.checked });
+          await Promise.all([loadChecklist(), loadDashboard()]);
+          renderCurrentTab();
+        });
+      });
+    });
+  }
+
+  function renderCurrentTab() {
+    const target = document.getElementById('tab-content');
+    if (state.activeTab === 'dashboard') {
+      target.innerHTML = renderDashboard(state.dashboardData);
+      bindDashboardActions();
+      return;
+    }
+    if (state.activeTab === 'competitions') {
+      target.innerHTML = renderCompetitions(state.competitionsData);
+      bindCompetitionsActions();
+      return;
+    }
+    target.innerHTML = renderChecklist(state.checklistData);
+    bindChecklistActions();
+  }
+
+  async function bootstrap() {
+    try {
+      const auth = await api.getAuthStatus();
+      document.getElementById('auth-loading').classList.add('hidden');
+      if (!auth.authorized) {
+        document.getElementById('unauthorized').classList.remove('hidden');
+        document.getElementById('main-ui').classList.add('hidden');
+        return;
+      }
+
+      state.user = auth.email;
+      document.getElementById('user-email').textContent = auth.email;
+      document.getElementById('main-ui').classList.remove('hidden');
+      setupTabs();
+
+      state.config = Object.assign({}, state.config, await api.getClientConfig());
+      await Promise.all([loadDashboard(), loadCompetitions(), loadChecklist()]);
+      renderCurrentTab();
+
+      setInterval(() => safeRun(async () => {
+        await Promise.all([loadDashboard(), loadCompetitions(), loadChecklist()]);
+        renderCurrentTab();
+      }), state.config.refreshIntervalMs || 5 * 60 * 1000);
+    } catch (err) {
+      document.getElementById('auth-loading').classList.add('hidden');
+      document.getElementById('unauthorized').classList.remove('hidden');
+      toast(err.message || 'Failed to start app');
+    }
+  }
+
+  bootstrap();
+</script>

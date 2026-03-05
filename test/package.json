@@ -1,0 +1,13 @@
+{
+  "name": "plt-csr-dashboard-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "jest",
+    "lint": "node -e \"console.log('No lint configured')\""
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
