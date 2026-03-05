@@ -3,7 +3,7 @@ const CONFIG = {
   ALLOWED_EMAILS: ['skhun@dublincleaners.com', 'ss.sku@gmail.com'],
   REFRESH_INTERVAL_MS: 5 * 60 * 1000,
   PERFORMANCE_GOAL: 150,
-  DEFAULT_STORES: ['Dublin', 'Pleasanton', 'San Ramon'],
+  DEFAULT_STORES: ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'],
   DB_PROPERTY_KEY: 'CSR_DASHBOARD_DB_ID',
   CACHE_KEY_DASHBOARD: 'csr_dashboard_payload',
   CACHE_SECONDS: 60,
@@ -85,6 +85,7 @@ function saveSalesEntry(payload) {
   if (!payload || !payload.weekStart || !payload.store || payload.year === undefined) {
     throw new Error('Invalid payload for sales entry.');
   }
+  assertValidStore_(payload.store);
 
   const db = openDatabase_();
   const sheet = db.getSheetByName(CONFIG.SHEETS.SALES_WEEKLY);
@@ -107,6 +108,9 @@ function saveCsrRecognition(payload) {
 
   const db = openDatabase_();
   const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_RECOGNITION);
+  if (payload.store) {
+    assertValidStore_(payload.store);
+  }
   const imageData = String(payload.imageData || '').trim();
   const imageUrl = String(payload.imageUrl || '').trim();
 
@@ -127,6 +131,7 @@ function savePerformanceEntry(payload) {
   if (!payload || !payload.date || !payload.store || !payload.csrName) {
     throw new Error('Invalid payload for performance entry.');
   }
+  assertValidStore_(payload.store);
 
   const db = openDatabase_();
   const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_PERFORMANCE);
@@ -147,6 +152,7 @@ function saveScheduleEntry(payload) {
   if (!payload || !payload.date || !payload.store || !payload.csrName) {
     throw new Error('Invalid payload for schedule entry.');
   }
+  assertValidStore_(payload.store);
 
   const db = openDatabase_();
   const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_SCHEDULE);
@@ -164,7 +170,9 @@ function saveScheduleEntry(payload) {
 function getCompetitionsData() {
   authorizeOrThrow_();
   const db = openDatabase_();
-  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS));
+  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS)).filter(function (row) {
+    return isValidStore_(row.store);
+  });
   const metricsMap = {};
   rows.forEach(function (row) {
     const metric = row.metric;
@@ -203,6 +211,9 @@ function saveCompetitionEntry(payload) {
   authorizeOrThrow_();
   if (!payload || !payload.metric || !payload.csrName) {
     throw new Error('Invalid payload. Expected metric and csrName.');
+  }
+  if (payload.store) {
+    assertValidStore_(payload.store);
   }
 
   const db = openDatabase_();
@@ -249,7 +260,7 @@ function getChecklist(dateIso, store) {
   const sheet = db.getSheetByName(CONFIG.SHEETS.CLEANING_CHECKLIST);
   const rows = getDataRows_(sheet);
   const targetDate = dateIso || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  const targetStore = store || CONFIG.DEFAULT_STORES[0];
+  const targetStore = isValidStore_(store) ? store : CONFIG.DEFAULT_STORES[0];
 
   const filtered = rows.filter(function (row) {
     return row.date === targetDate && row.store === targetStore;
@@ -414,9 +425,9 @@ function seedPerformance_(sheet) {
   yesterday.setDate(yesterday.getDate() - 1);
   const yIso = Utilities.formatDate(yesterday, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const rows = [
-    [yIso, 'Dublin', 'Ana', 3900, 22],
-    [yIso, 'Pleasanton', 'Chris', 4600, 24],
-    [yIso, 'San Ramon', 'Taylor', 3600, 20]
+    [yIso, 'Plant', 'Ana', 3900, 22],
+    [yIso, 'Muirfield', 'Chris', 4600, 24],
+    [yIso, 'Frantz', 'Taylor', 3600, 20]
   ];
   sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
 }
@@ -445,7 +456,7 @@ function seedRecognition_(sheet) {
   sheet.getRange(2, 1, 1, 5).setValues([[
     weekStart,
     'Chris',
-    'Pleasanton',
+    'Muirfield',
     'Every customer leaves smiling because we listen first.',
     ''
   ]]);
@@ -516,7 +527,7 @@ function buildSalesComparison_(db) {
     if (row.weekStart !== targetWeek) return;
     const year = Number(row.year);
     const store = row.store;
-    if (!store || !year) return;
+    if (!store || !year || !isValidStore_(store)) return;
     availableYears[year] = true;
     stores[store] = true;
   });
@@ -532,14 +543,14 @@ function buildSalesComparison_(db) {
   rows.forEach(function (row) {
     if (row.weekStart !== targetWeek) return;
     const store = row.store;
-    if (!store) return;
+    if (!store || !isValidStore_(store)) return;
     if (!grouped[store]) grouped[store] = { store: store, salesThisYear: 0, salesLastYear: 0 };
     const year = Number(row.year);
     if (year === lastYear) grouped[store].salesLastYear += Number(row.sales || 0);
     if (year === thisYear) grouped[store].salesThisYear += Number(row.sales || 0);
   });
 
-  const allStores = Object.keys(stores).length ? Object.keys(stores) : CONFIG.DEFAULT_STORES;
+  const allStores = CONFIG.DEFAULT_STORES.slice();
   const mappedRows = allStores.map(function (store) {
     if (!grouped[store]) {
       grouped[store] = { store: store, salesThisYear: 0, salesLastYear: 0 };
@@ -572,7 +583,7 @@ function buildCsrPerformanceYesterday_(db) {
   const dateIso = Utilities.formatDate(y, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const mapped = rows
     .filter(function (row) {
-      return row.date === dateIso;
+      return row.date === dateIso && isValidStore_(row.store);
     })
     .map(function (row) {
       const sales = Number(row.sales || 0);
@@ -607,7 +618,7 @@ function buildScheduleWeek_(db) {
   const endIso = Utilities.formatDate(sunday, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
   const entries = rows.filter(function (row) {
-    return row.date >= startIso && row.date <= endIso;
+    return row.date >= startIso && row.date <= endIso && isValidStore_(row.store);
   });
 
   const offList = entries.filter(function (row) {
@@ -642,7 +653,7 @@ function buildCompetitionsSnapshot_(db) {
   const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS));
   const weekStart = getWeekStartISO_(new Date());
   const filtered = rows.filter(function (row) {
-    return row.weekStart === weekStart;
+    return row.weekStart === weekStart && isValidStore_(row.store);
   });
 
   const byMetric = {};
@@ -767,6 +778,16 @@ function toCamelCase_(text) {
       return idx === 0 ? lower : lower.charAt(0).toUpperCase() + lower.slice(1);
     })
     .join('');
+}
+
+function isValidStore_(store) {
+  return CONFIG.DEFAULT_STORES.indexOf(String(store || '').trim()) !== -1;
+}
+
+function assertValidStore_(store) {
+  if (!isValidStore_(store)) {
+    throw new Error('Invalid location. Update system configuration to use new locations.');
+  }
 }
 
 function normalizeBoolean_(value) {

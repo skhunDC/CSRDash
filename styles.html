@@ -43,8 +43,11 @@
   .span-8 { grid-column: span 8; }
 
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 17px; }
-  th { color: var(--muted); font-weight: 600; }
+  .data-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .data-table th, .data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 17px; vertical-align: middle; }
+  .data-table th { color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
+  .data-table th:first-child, .data-table td:first-child { padding-left: 14px; }
+  .data-table th:last-child, .data-table td:last-child { padding-right: 14px; }
   .number { text-align: right; font-variant-numeric: tabular-nums; }
   .bar-wrap { height: 12px; background: #223357; border-radius: 999px; overflow: hidden; margin-top: 6px; }
   .bar { height: 100%; background: linear-gradient(90deg, var(--accent), #76d5ff); }
@@ -77,7 +80,7 @@
   .sales-card-head { align-items: center; }
   .year-header-input { width: 95px; }
   .sales-controls { margin: 8px 0 10px; }
-  .editable-table-frame { border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; }
+  .editable-table-frame { border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; background: rgba(10,16,30,0.35); }
   .trend-cell { min-width: 180px; }
   .trend-graph { width: 100%; max-width: 120px; height: 30px; display: block; margin-top: 4px; }
   .trend-baseline { stroke: rgba(255,255,255,0.2); stroke-width: 1; }

@@ -7,7 +7,7 @@
     dashboardData: null,
     competitionsData: null,
     checklistData: null,
-    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Dublin', 'Pleasanton', 'San Ramon'] },
+    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'] },
     salesTable: {
       thisYear: '2026',
       lastYear: '2025',
@@ -140,7 +140,10 @@
 
     const perfRows = data.csrPerformanceYesterday.entries.map((row) => {
       const isTop = data.csrPerformanceYesterday.topPerformer && data.csrPerformanceYesterday.topPerformer.csrName === row.csrName;
-      return `<tr><td>${row.csrName} ${isTop ? '🏆' : ''}</td><td>${row.store}</td><td class="number">${fmtCurrency(row.dollarsPerHour)}</td><td class="number">${fmtCurrency(row.sales)}</td><td class="number">${row.hours}</td></tr>`;
+      const deltaPerHour = row.dollarsPerHour - data.goalPerHour;
+      const trendClass = getTrendClass(deltaPerHour);
+      const trendLabel = deltaPerHour > 0 ? 'Above Goal' : deltaPerHour < 0 ? 'Below Goal' : 'At Goal';
+      return `<tr><td>${row.csrName} ${isTop ? '🏆' : ''}</td><td>${row.store}</td><td class="number">${fmtCurrency(row.dollarsPerHour)}</td><td class="number">${fmtCurrency(row.sales)}</td><td class="number">${Number(row.hours).toFixed(2)}</td><td class="${trendClass}"><span class="pill ${deltaPerHour >= 0 ? 'good' : 'bad'}">${trendLabel}</span> <span class="caption">${withDeltaSign(deltaPerHour)}</span></td></tr>`;
     }).join('');
 
     const offRows = filteredOff.map((row) => `<li>${row.date}: <strong>${row.csrName}</strong> (${row.store})</li>`).join('') || '<li>No one marked OFF for selected store this week.</li>';
@@ -152,7 +155,7 @@
           <div class="card-head sales-card-head"><input id="sales-title-input" class="title-input" value="${state.salesTable.title}" aria-label="Sales table title" /><span class="caption">Week of ${data.scheduleWeek.weekStart}</span></div>
           <div class="row sales-controls"><label class="caption">Last Year <input id="sales-last-year-header" class="year-header-input" value="${state.salesTable.lastYear}" /></label><label class="caption">This Year <input id="sales-this-year-header" class="year-header-input" value="${state.salesTable.thisYear}" /></label><button id="sales-title-reset" class="tab" ${state.salesTable.titleAuto ? 'disabled' : ''}>Reset to auto title</button></div>
           <p class="caption">Spreadsheet-style: edit cells and tab to auto-save.</p>
-          <table class="editable-table-frame"><thead><tr><th>Store</th><th class="number">${state.salesTable.lastYear}</th><th class="number">${state.salesTable.thisYear}</th><th class="number">Delta</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
+          <table class="data-table editable-table-frame"><thead><tr><th>Store</th><th class="number">${state.salesTable.lastYear}</th><th class="number">${state.salesTable.thisYear}</th><th class="number">Δ ${state.salesTable.thisYear}-${state.salesTable.lastYear}</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
         </article>
 
         <article class="card span-4">
@@ -172,7 +175,7 @@
         <article class="card span-6">
           <h2>CSR $/Hour (Yesterday)</h2>
           <p>Goal: ${fmtCurrency(data.goalPerHour)}</p>
-          <table><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th></tr></thead><tbody>${perfRows}</tbody></table>
+          <table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th><th>Trend</th></tr></thead><tbody>${perfRows}</tbody></table>
           <div class="row">
             <input id="perf-csr" placeholder="CSR name" />
             <select id="perf-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
@@ -209,11 +212,11 @@
   function renderCompetitions(data) {
     const metrics = [...new Set(data.rows.map((r) => r.metric))];
     const csrOptions = [...new Set(data.rows.map((r) => r.csrName))].map((c) => `<option>${c}</option>`).join('');
-    const stores = state.config.defaultStores || ['Dublin', 'Pleasanton', 'San Ramon'];
+    const stores = state.config.defaultStores || ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'];
 
     const blocks = data.leaders.map((metricObj) => {
       const rows = metricObj.entries.map((entry) => `<tr><td>${entry.csrName}</td><td>${entry.store}</td><td class="number">${entry.value}</td></tr>`).join('');
-      return `<article class="card span-4"><h2>${metricObj.metric}</h2><p>Leader: <strong>${metricObj.leader ? metricObj.leader.csrName : '-'}</strong></p><table><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th></tr></thead><tbody>${rows}</tbody></table></article>`;
+      return `<article class="card span-4"><h2>${metricObj.metric}</h2><p>Leader: <strong>${metricObj.leader ? metricObj.leader.csrName : '-'}</strong></p><table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th></tr></thead><tbody>${rows}</tbody></table></article>`;
     }).join('');
 
     return `
@@ -229,7 +232,7 @@
   }
 
   function renderChecklist(data) {
-    const stores = state.config.defaultStores || ['Dublin', 'Pleasanton', 'San Ramon'];
+    const stores = state.config.defaultStores || ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'];
     const items = data.items.map((item) => `<div class="check-item"><label>${item.task}</label><input data-task="${item.task}" class="check-toggle" type="checkbox" ${item.completed ? 'checked' : ''} /></div>`).join('');
     const completed = data.items.filter((item) => item.completed).length;
     const pct = data.items.length ? Math.round((completed / data.items.length) * 100) : 0;
@@ -240,7 +243,7 @@
   async function loadDashboard() { state.dashboardData = await api.getDashboardData(); }
   async function loadCompetitions() { state.competitionsData = await api.getCompetitionsData(); }
   async function loadChecklist() {
-    const store = state.storeFilter === 'All' ? (state.config.defaultStores[0] || 'Dublin') : state.storeFilter;
+    const store = state.storeFilter === 'All' ? (state.config.defaultStores[0] || 'Plant') : state.storeFilter;
     state.checklistData = await api.getChecklist(state.dateSelected, store);
   }
 

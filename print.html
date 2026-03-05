@@ -10,8 +10,8 @@
       h1, h2 { margin: 0 0 12px; }
       .controls { margin-bottom: 16px; }
       table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-      th { background: #f5f5f5; }
+      .data-table th, .data-table td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; }
+      .data-table th { background: #f5f5f5; }
       .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
       .yes { background: #d9fbe5; color: #0f5132; }
       .no { background: #fbe3e3; color: #842029; }
@@ -52,7 +52,7 @@
         var rows = data.items.map(function(item) {
           return '<tr><td>' + item.task + '</td><td><span class="badge ' + (item.completed ? 'yes">Completed' : 'no">Open') + '</span></td><td>' + (item.completedBy || '-') + '</td></tr>';
         }).join('');
-        return '<h2>Daily Checklist (' + data.store + ' - ' + data.date + ')</h2><table><thead><tr><th>Task</th><th>Status</th><th>Completed By</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        return '<h2>Daily Checklist (' + data.store + ' - ' + data.date + ')</h2><table class="data-table"><thead><tr><th>Task</th><th>Status</th><th>Completed By</th></tr></thead><tbody>' + rows + '</tbody></table>';
       }
 
       function renderCompetitions(data) {
@@ -60,7 +60,7 @@
           var rows = metricObj.entries.map(function(entry) {
             return '<tr><td>' + entry.csrName + '</td><td>' + entry.store + '</td><td>' + entry.value + '</td></tr>';
           }).join('');
-          return '<h2>' + metricObj.metric + '</h2><table><thead><tr><th>CSR</th><th>Store</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+          return '<h2>' + metricObj.metric + '</h2><table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
         }).join('');
         return '<h2>Competitions Standings</h2>' + blocks;
       }
@@ -72,7 +72,7 @@
         try {
           if (mode === 'checklist') {
             var now = new Date().toISOString().slice(0, 10);
-            var data = await apiCall('getChecklist', [now, 'Dublin']);
+            var data = await apiCall('getChecklist', [now, 'Plant']);
             target.innerHTML = renderChecklist(data);
           } else {
             var comp = await apiCall('getCompetitionsData');
