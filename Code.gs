@@ -61,9 +61,12 @@ function getDashboardData() {
   }
 
   const db = openDatabase_();
+  const salesComparisonPayload = buildSalesComparison_(db);
+
   const payload = {
     generatedAt: new Date().toISOString(),
-    salesComparison: buildSalesComparison_(db),
+    salesComparison: salesComparisonPayload.rows,
+    salesComparisonYears: salesComparisonPayload.years,
     csrPerformanceYesterday: buildCsrPerformanceYesterday_(db),
     scheduleWeek: buildScheduleWeek_(db),
     csrOfWeek: buildCsrOfWeek_(db),
@@ -506,28 +509,60 @@ function getDataRows_(sheet) {
 function buildSalesComparison_(db) {
   const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.SALES_WEEKLY));
   const targetWeek = getWeekStartISO_(new Date());
+  const availableYears = {};
+  const stores = {};
+
+  rows.forEach(function (row) {
+    if (row.weekStart !== targetWeek) return;
+    const year = Number(row.year);
+    const store = row.store;
+    if (!store || !year) return;
+    availableYears[year] = true;
+    stores[store] = true;
+  });
+
+  const yearList = Object.keys(availableYears)
+    .map(function (year) { return Number(year); })
+    .sort(function (a, b) { return a - b; });
+
+  const thisYear = yearList.length ? yearList[yearList.length - 1] : new Date().getFullYear();
+  const lastYear = yearList.length > 1 ? yearList[yearList.length - 2] : thisYear - 1;
   const grouped = {};
 
   rows.forEach(function (row) {
     if (row.weekStart !== targetWeek) return;
     const store = row.store;
-    if (!grouped[store]) grouped[store] = { store: store, sales2025: 0, sales2026: 0 };
-    if (Number(row.year) === 2025) grouped[store].sales2025 += Number(row.sales || 0);
-    if (Number(row.year) === 2026) grouped[store].sales2026 += Number(row.sales || 0);
+    if (!store) return;
+    if (!grouped[store]) grouped[store] = { store: store, salesThisYear: 0, salesLastYear: 0 };
+    const year = Number(row.year);
+    if (year === lastYear) grouped[store].salesLastYear += Number(row.sales || 0);
+    if (year === thisYear) grouped[store].salesThisYear += Number(row.sales || 0);
   });
 
-  return Object.keys(grouped).map(function (store) {
+  const allStores = Object.keys(stores).length ? Object.keys(stores) : CONFIG.DEFAULT_STORES;
+  const mappedRows = allStores.map(function (store) {
+    if (!grouped[store]) {
+      grouped[store] = { store: store, salesThisYear: 0, salesLastYear: 0 };
+    }
     const item = grouped[store];
-    const delta = item.sales2026 - item.sales2025;
-    const pct = item.sales2025 ? delta / item.sales2025 : 0;
+    const delta = item.salesThisYear - item.salesLastYear;
+    const pct = item.salesLastYear ? delta / item.salesLastYear : 0;
     return {
       store: store,
-      sales2025: item.sales2025,
-      sales2026: item.sales2026,
+      salesLastYear: item.salesLastYear,
+      salesThisYear: item.salesThisYear,
       delta: delta,
       deltaPct: pct
     };
   });
+
+  return {
+    years: {
+      thisYear: thisYear,
+      lastYear: lastYear
+    },
+    rows: mappedRows
+  };
 }
 
 function buildCsrPerformanceYesterday_(db) {
