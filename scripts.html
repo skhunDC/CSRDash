@@ -2,8 +2,8 @@
   const state = {
     user: null,
     activeTab: 'dashboard',
-    storeFilter: 'All',
     dateSelected: new Date().toISOString().slice(0, 10),
+    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: [] },
     dashboardData: null,
     checklistData: null,
     categories: { all: [], enabled: [] },
@@ -29,8 +29,7 @@
   const api = {
     call(name, args = []) {
       return new Promise((resolve, reject) => {
-        const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-        runner[name](...args);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args);
       });
     },
     getAuthStatus() { return this.call('getAuthStatus'); },
@@ -47,68 +46,41 @@
     savePerformanceEntry(payload) { return this.call('savePerformanceEntry', [payload]); },
     saveScheduleEntry(payload) { return this.call('saveScheduleEntry', [payload]); },
     getChecklist(date, store) { return this.call('getChecklist', [date, store]); },
-    setChecklistItem(payload) { return this.call('setChecklistItem', [payload]); }
+    setChecklistItem(payload) { return this.call('setChecklistItem', [payload]); },
+    getCompetitionCategories() { return this.call('getCompetitionCategories'); },
+    saveCompetitionCategories(payload) { return this.call('saveCompetitionCategories', [payload]); },
+    getCompetitionCategoryData(categoryKey, dateRange, store) { return this.call('getCompetitionCategoryData', [categoryKey, dateRange, store]); },
+    saveCompetitionEntries(payload) { return this.call('saveCompetitionEntries', [payload]); },
+    getAppLinks() { return this.call('getAppLinks'); },
+    saveAppLinks(payload) { return this.call('saveAppLinks', [payload]); }
   };
 
-  const fmtCurrency = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
-  const fmtPercent = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
-  const defaultSalesTitle = (thisYear, lastYear) => `Sales Week ${thisYear} vs ${lastYear}`;
-  const getYesterdayIso = () => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().slice(0, 10);
+  const toast = (message) => {
+    const node = document.getElementById('toast');
+    node.textContent = message;
+    node.classList.remove('hidden');
+    setTimeout(() => node.classList.add('hidden'), 3000);
   };
 
-  function withDeltaSign(amount) {
-    const absolute = fmtCurrency(Math.abs(amount));
-    if (amount > 0) return `+${absolute}`;
-    if (amount < 0) return `-${absolute}`;
-    return absolute;
+  const esc = (v) => String(v || '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\'': '&#39;', '"': '&quot;' }[c]));
+  const fmt = (n) => Number(n || 0).toLocaleString();
+
+  async function safeRun(task) {
+    try { await task(); } catch (err) { toast(err.message || 'Error'); }
   }
 
-  function getTrendClass(value) {
-    if (value > 0) return 'trend-positive';
-    if (value < 0) return 'trend-negative';
-    return 'trend-neutral';
+  function getFixedTabs() {
+    return [
+      { key: 'dashboard', label: 'Dashboard', type: 'fixed' },
+      { key: 'checklist', label: 'Cleaning Checklist', type: 'fixed' },
+      { key: 'metrics_admin', label: 'Metrics Admin', type: 'fixed' },
+      { key: 'links_admin', label: 'Links Admin', type: 'fixed' }
+    ];
   }
 
-  function buildTrendLineSvg(previousYearValue, thisYearValue) {
-    const width = 120;
-    const height = 30;
-    const left = 10;
-    const right = width - 10;
-    const top = 6;
-    const bottom = height - 6;
-    const max = Math.max(previousYearValue, thisYearValue, 1);
-    const yFor = (value) => bottom - ((value / max) * (bottom - top));
-    const y1 = yFor(previousYearValue);
-    const y2 = yFor(thisYearValue);
-    const trendClass = getTrendClass(thisYearValue - previousYearValue);
-
-    return `<svg class="trend-graph ${trendClass}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Trend line">
-      <line class="trend-baseline" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"></line>
-      <polyline class="trend-path" points="${left},${y1} ${right},${y2}"></polyline>
-      <circle class="trend-point" cx="${left}" cy="${y1}" r="2.8"></circle>
-      <circle class="trend-point" cx="${right}" cy="${y2}" r="2.8"></circle>
-    </svg>`;
-  }
-
-  function hydrateSalesTableState(data) {
-    const serverThisYear = String((data.salesComparisonYears && data.salesComparisonYears.thisYear) || 2026);
-    const serverLastYear = String((data.salesComparisonYears && data.salesComparisonYears.lastYear) || 2025);
-
-    if (!state.salesTable.initialized) {
-      state.salesTable.thisYear = serverThisYear;
-      state.salesTable.lastYear = serverLastYear;
-      state.salesTable.initialized = true;
-    }
-
-    if (state.salesTable.titleAuto) {
-      state.salesTable.title = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
-    } else if (!state.salesTable.title) {
-      state.salesTable.title = defaultSalesTitle(serverThisYear, serverLastYear);
-      state.salesTable.titleAuto = true;
-    }
+  function buildTabModel() {
+    const categoryTabs = state.categories.enabled.map((cat) => ({ key: `category:${cat.categoryKey}`, label: cat.categoryName, type: 'category', categoryKey: cat.categoryKey }));
+    return [getFixedTabs()[0], ...categoryTabs, ...getFixedTabs().slice(1)];
   }
 
   function toast(message) {
@@ -154,57 +126,19 @@
       renderTopTabs();
       renderCurrentTab();
     });
+    if (!tabs.find((t) => t.key === state.activeTab)) {
+      state.activeTab = 'dashboard';
+    }
   }
 
-  function renderDashboard(data) {
-    hydrateSalesTableState(data);
-    const stores = ['All'].concat(state.config.defaultStores || []);
-    const filteredOff = data.scheduleWeek.offList.filter((row) => state.storeFilter === 'All' || row.store === state.storeFilter);
-    const imageMarkup = data.csrOfWeek.imageUrl ? `<img src="${data.csrOfWeek.imageUrl}" alt="CSR of the week" class="csr-week-image" />` : '';
+  function patioLinkButton(size = '') {
+    const link = state.links.PATIO_CUSHION_SIGNUP || state.dashboardData?.patioCushionSignupLink || { label: 'Patio Cushion Signup Sheet', url: '#' };
+    return `<a class="tab ${size}" href="${esc(link.url)}" target="_blank" rel="noopener">↗ ${esc(link.label || 'Patio Cushion Signup Sheet')}</a>`;
+  }
 
-    const salesRows = data.salesComparison.map((row) => {
-      const growth = row.deltaPct >= 0;
-      const deltaClass = getTrendClass(row.delta);
-      return `<tr>
-        <td>${row.store}</td>
-        <td class="number"><input class="cell-input number sales-input sales-last-year" data-store="${row.store}" data-slot="lastYear" type="number" value="${Number(row.salesLastYear || 0)}" /></td>
-        <td class="number"><input class="cell-input number sales-input sales-this-year" data-store="${row.store}" data-slot="thisYear" type="number" value="${Number(row.salesThisYear || 0)}" /></td>
-        <td class="number delta-value ${deltaClass}">${withDeltaSign(row.delta)} (${fmtPercent(row.deltaPct)})</td>
-        <td class="trend-cell"><span class="pill ${growth ? 'good' : 'bad'}">${growth ? 'Up' : 'Down'}</span>${buildTrendLineSvg(Number(row.salesLastYear || 0), Number(row.salesThisYear || 0))}</td>
-      </tr>`;
-    }).join('');
-
-    const perfRows = data.csrPerformanceYesterday.entries.map((row) => {
-      const isTop = data.csrPerformanceYesterday.topPerformer && data.csrPerformanceYesterday.topPerformer.csrName === row.csrName;
-      const deltaPerHour = row.dollarsPerHour - data.goalPerHour;
-      const trendClass = getTrendClass(deltaPerHour);
-      const trendLabel = deltaPerHour > 0 ? 'Above Goal' : deltaPerHour < 0 ? 'Below Goal' : 'At Goal';
-      return `<tr><td>${row.csrName} ${isTop ? '🏆' : ''}</td><td>${row.store}</td><td class="number">${fmtCurrency(row.dollarsPerHour)}</td><td class="number">${fmtCurrency(row.sales)}</td><td class="number">${Number(row.hours).toFixed(2)}</td><td class="${trendClass}"><span class="pill ${deltaPerHour >= 0 ? 'good' : 'bad'}">${trendLabel}</span> <span class="caption">${withDeltaSign(deltaPerHour)}</span></td></tr>`;
-    }).join('');
-
-    const perfDraftRows = state.dashboardDrafts.performance.map((row) => {
-      const sales = Number(row.sales || 0);
-      const hours = Number(row.hours || 0);
-      const dollarsPerHour = hours > 0 ? sales / hours : 0;
-      return `<tr data-draft-id="${row.id}">
-        <td><input class="perf-draft-field" data-field="csrName" data-draft-id="${row.id}" placeholder="CSR name" value="${row.csrName || ''}" /></td>
-        <td><select class="perf-draft-field" data-field="store" data-draft-id="${row.id}">${(state.config.defaultStores || []).map((store) => `<option ${store === row.store ? 'selected' : ''}>${store}</option>`).join('')}</select></td>
-        <td class="number">${fmtCurrency(dollarsPerHour)}</td>
-        <td class="number"><input class="perf-draft-field number" data-field="sales" data-draft-id="${row.id}" type="number" min="0" step="1" value="${row.sales || ''}" /></td>
-        <td class="number"><input class="perf-draft-field number" data-field="hours" data-draft-id="${row.id}" type="number" min="0" step="0.25" value="${row.hours || ''}" /></td>
-        <td><span class="caption">Draft row</span></td>
-      </tr>`;
-    }).join('');
-
-    const offRows = filteredOff.map((row) => `<tr><td>${row.date}</td><td>${row.csrName}</td><td>${row.store}</td><td>OFF</td></tr>`).join('') || '<tr><td colspan="4" class="caption">No one marked OFF for selected store this week.</td></tr>';
-    const scheduleDraftRows = state.dashboardDrafts.schedule.map((row) => `<tr data-draft-id="${row.id}">
-      <td><input class="sched-draft-field" data-field="date" data-draft-id="${row.id}" type="date" value="${row.date}" /></td>
-      <td><input class="sched-draft-field" data-field="csrName" data-draft-id="${row.id}" placeholder="CSR name" value="${row.csrName || ''}" /></td>
-      <td><select class="sched-draft-field" data-field="store" data-draft-id="${row.id}">${(state.config.defaultStores || []).map((store) => `<option ${store === row.store ? 'selected' : ''}>${store}</option>`).join('')}</select></td>
-      <td><select class="sched-draft-field" data-field="shiftStatus" data-draft-id="${row.id}"><option ${row.shiftStatus === 'OFF' ? 'selected' : ''}>OFF</option><option ${row.shiftStatus === '9a-5p' ? 'selected' : ''}>9a-5p</option><option ${row.shiftStatus === '10a-6p' ? 'selected' : ''}>10a-6p</option></select></td>
-    </tr>`).join('');
-    const compCards = data.competitionsSnapshot.map((metric) => `<p><strong>${metric.metric}:</strong> ${metric.leader ? `${metric.leader.csrName} (${metric.leader.value})` : 'No entries'}</p>`).join('');
-
+  function renderDashboard() {
+    const data = state.dashboardData;
+    const comp = (data.competitionsSummary || []).slice(0, 3).map((item) => `<li>${esc(item.metric)}: <strong>${esc(item.leader ? item.leader.csrName : '-')}</strong> (${fmt(item.leader ? item.leader.value : 0)})</li>`).join('');
     return `
       <section class="grid">
         <article class="card span-8">
@@ -294,13 +228,17 @@
     return `<section class="card"><div class="row"><h2>Links Admin</h2><button id="links-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>Key</th><th>Label</th><th>URL</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }
 
-  function renderChecklist(data) {
-    const stores = state.config.defaultStores || ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'];
-    const items = data.items.map((item) => `<div class="check-item"><label>${item.task}</label><input data-task="${item.task}" class="check-toggle" type="checkbox" ${item.completed ? 'checked' : ''} /></div>`).join('');
-    const completed = data.items.filter((item) => item.completed).length;
-    const pct = data.items.length ? Math.round((completed / data.items.length) * 100) : 0;
-
-    return `<section class="card"><div class="row"><label>Date <input type="date" id="check-date" value="${data.date}" /></label><label>Store <select id="check-store">${stores.map((s) => `<option ${s === data.store ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button id="check-load" class="tab">Load</button><a class="tab" href="?page=print" target="_blank">Print View</a></div><h2>End of Day Checklist — ${data.store}</h2><p>${completed}/${data.items.length} complete</p><div class="progress"><div style="width:${pct}%"></div></div><div style="margin-top:12px">${items}</div></section>`;
+  function renderMetricsAdmin() {
+    const rows = state.drafts.categories.map((row, idx) => `<tr>
+      <td><input data-idx="${idx}" data-field="categoryKey" class="metric-input" value="${esc(row.categoryKey)}"/></td>
+      <td><input data-idx="${idx}" data-field="categoryName" class="metric-input" value="${esc(row.categoryName)}"/></td>
+      <td><input data-idx="${idx}" data-field="enabled" class="metric-input" type="checkbox" ${row.enabled ? 'checked' : ''}/></td>
+      <td><input data-idx="${idx}" data-field="sortOrder" class="metric-input" type="number" value="${Number(row.sortOrder || 0)}"/></td>
+      <td><input data-idx="${idx}" data-field="goal" class="metric-input" value="${esc(row.goal || '')}"/></td>
+      <td><input data-idx="${idx}" data-field="notes" class="metric-input" value="${esc(row.notes || '')}"/></td>
+    </tr>`).join('');
+    return `<section class="card"><div class="row"><h2>Metrics Admin</h2><button id="metric-add" class="tab">Add Category</button><button id="metric-save" class="tab">Save</button></div>
+      <table class="data-table"><thead><tr><th>CategoryKey</th><th>CategoryName</th><th>Enabled</th><th>SortOrder</th><th>Goal</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }
 
   async function loadDashboard() { state.dashboardData = await api.getDashboardData(); }
@@ -360,192 +298,57 @@
       });
     }
 
-    document.querySelectorAll('.sales-input').forEach((input) => {
+  function bindCategoryActions(categoryKey) {
+    const toggle = document.getElementById('toggle-manage');
+    if (toggle) toggle.onclick = () => { state.manageMode[categoryKey] = !state.manageMode[categoryKey]; renderCurrentTab(); };
+    document.querySelectorAll('.comp-input').forEach((input) => {
       input.addEventListener('input', () => {
-        updateSalesRowPresentation(input.closest('tr'));
-      });
-      input.addEventListener('change', async () => {
-        await safeRun(async () => {
-          const year = input.dataset.slot === 'thisYear' ? Number(state.salesTable.thisYear) : Number(state.salesTable.lastYear);
-          if (!Number.isFinite(year)) throw new Error('Year headers must be numeric before saving sales values.');
-          await api.saveSalesEntry({
-            weekStart: state.dashboardData.scheduleWeek.weekStart,
-            store: input.dataset.store,
-            year,
-            sales: Number(input.value || 0)
-          });
-          await loadDashboard();
-          renderCurrentTab();
-        });
+        const draft = state.drafts.entries[categoryKey] || (state.drafts.entries[categoryKey] = JSON.parse(JSON.stringify(state.categoryData[categoryKey].entries || [])));
+        const idx = Number(input.dataset.idx);
+        draft[idx][input.dataset.field] = input.dataset.field === 'value' ? Number(input.value || 0) : input.value;
       });
     });
-
-    const titleInput = document.getElementById('sales-title-input');
-    const resetBtn = document.getElementById('sales-title-reset');
-    const thisYearInput = document.getElementById('sales-this-year-header');
-    const lastYearInput = document.getElementById('sales-last-year-header');
-
-    if (titleInput) {
-      titleInput.addEventListener('input', () => {
-        state.salesTable.title = titleInput.value;
-        const expected = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
-        state.salesTable.titleAuto = titleInput.value === expected;
-        if (resetBtn) resetBtn.disabled = state.salesTable.titleAuto;
-      });
-    }
-
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => {
-        state.salesTable.titleAuto = true;
-        state.salesTable.title = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
-        renderCurrentTab();
-      });
-    }
-
-    [
-      { input: thisYearInput, key: 'thisYear' },
-      { input: lastYearInput, key: 'lastYear' }
-    ].forEach((entry) => {
-      if (!entry.input) return;
-      entry.input.addEventListener('change', () => {
-        state.salesTable[entry.key] = entry.input.value.trim();
-        syncSalesTitle();
-        renderCurrentTab();
-      });
+    const save = document.getElementById('save-entries');
+    if (save) save.onclick = () => safeRun(async () => {
+      const draft = state.drafts.entries[categoryKey] || state.categoryData[categoryKey].entries;
+      await api.saveCompetitionEntries({ entries: draft.map((row) => ({ weekStart: state.categoryData[categoryKey].weekStart, store: row.store || '', csr: row.csr, categoryKey, value: Number(row.value || 0), notes: row.notes || '' })) });
+      state.categoryData[categoryKey] = await api.getCompetitionCategoryData(categoryKey, { weekStart: state.categoryData[categoryKey].weekStart }, 'All');
+      state.dashboardData = await api.getDashboardData();
+      toast('Competition entries saved.');
+      renderCurrentTab();
     });
+  }
 
-    const csrSave = document.getElementById('csr-save');
-    if (csrSave) {
-      csrSave.addEventListener('click', async () => {
-        await safeRun(async () => {
-          const fileInput = document.getElementById('csr-image');
-          const file = fileInput.files && fileInput.files[0];
-          const imageData = file ? await readFileAsDataUrl(file) : '';
-
-          await api.saveCsrRecognition({
-            weekStart: state.dashboardData.scheduleWeek.weekStart,
-            csrName: document.getElementById('csr-name').value.trim(),
-            store: document.getElementById('csr-store').value,
-            quote: document.getElementById('csr-quote').value.trim(),
-            imageData
-          });
-          await loadDashboard();
-          renderCurrentTab();
-          toast('CSR of the week saved.');
-        });
-      });
-    }
-
-    const perfSave = document.getElementById('perf-save');
-    if (perfSave) {
-      perfSave.addEventListener('click', async () => {
-        await safeRun(async () => {
-          const dateIso = getYesterdayIso();
-          await api.savePerformanceEntry({
-            date: dateIso,
-            csrName: document.getElementById('perf-csr').value.trim(),
-            store: document.getElementById('perf-store').value,
-            sales: Number(document.getElementById('perf-sales').value || 0),
-            hours: Number(document.getElementById('perf-hours').value || 0)
-          });
-          await loadDashboard();
-          renderCurrentTab();
-        });
-      });
-    }
-
-    const perfAddRow = document.getElementById('perf-add-row');
-    if (perfAddRow) {
-      perfAddRow.addEventListener('click', () => {
-        state.dashboardDrafts.performance.push({
-          id: state.nextDraftId++,
-          csrName: '',
-          store: (state.config.defaultStores || [])[0] || 'Plant',
-          sales: '',
-          hours: ''
-        });
-        renderCurrentTab();
-      });
-    }
-
-    const savePerformanceDraft = async (draftId) => {
-      const draft = state.dashboardDrafts.performance.find((row) => String(row.id) === String(draftId));
-      if (!draft || !draft.csrName.trim()) return;
-      await api.savePerformanceEntry({
-        date: getYesterdayIso(),
-        csrName: draft.csrName.trim(),
-        store: draft.store,
-        sales: Number(draft.sales || 0),
-        hours: Number(draft.hours || 0)
-      });
-      state.dashboardDrafts.performance = state.dashboardDrafts.performance.filter((row) => row.id !== draft.id);
-      await loadDashboard();
+  function bindMetricsActions() {
+    document.getElementById('metric-add').onclick = () => {
+      state.drafts.categories.push({ categoryKey: '', categoryName: 'New Category', enabled: true, sortOrder: state.drafts.categories.length + 1, goal: '', notes: '' });
       renderCurrentTab();
     };
-
-    document.querySelectorAll('.perf-draft-field').forEach((input) => {
+    document.querySelectorAll('.metric-input').forEach((input) => {
       input.addEventListener('input', () => {
-        const draft = state.dashboardDrafts.performance.find((row) => String(row.id) === input.dataset.draftId);
-        if (!draft) return;
-        draft[input.dataset.field] = input.value;
+        const row = state.drafts.categories[Number(input.dataset.idx)];
+        row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
       });
       input.addEventListener('change', () => {
-        safeRun(async () => { await savePerformanceDraft(input.dataset.draftId); });
+        const row = state.drafts.categories[Number(input.dataset.idx)];
+        row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
       });
     });
+    document.getElementById('metric-save').onclick = () => safeRun(async () => {
+      await api.saveCompetitionCategories({ categories: state.drafts.categories });
+      await refreshCategoriesAndData();
+      toast('Categories saved.');
+    });
+  }
 
-    const schedSave = document.getElementById('sched-save');
-    if (schedSave) {
-      schedSave.addEventListener('click', async () => {
-        await safeRun(async () => {
-          await api.saveScheduleEntry({
-            date: document.getElementById('sched-date').value,
-            store: document.getElementById('sched-store').value,
-            csrName: document.getElementById('sched-csr').value.trim(),
-            shiftStatus: document.getElementById('sched-status').value
-          });
-          await loadDashboard();
-          renderCurrentTab();
-        });
-      });
-    }
+  function isValidUrl(url) {
+    return /^https?:\/\//i.test(String(url || ''));
+  }
 
-    const schedAddRow = document.getElementById('sched-add-row');
-    if (schedAddRow) {
-      schedAddRow.addEventListener('click', () => {
-        state.dashboardDrafts.schedule.push({
-          id: state.nextDraftId++,
-          date: state.dashboardData.scheduleWeek.weekStart,
-          csrName: '',
-          store: (state.config.defaultStores || [])[0] || 'Plant',
-          shiftStatus: 'OFF'
-        });
-        renderCurrentTab();
-      });
-    }
-
-    const saveScheduleDraft = async (draftId) => {
-      const draft = state.dashboardDrafts.schedule.find((row) => String(row.id) === String(draftId));
-      if (!draft || !draft.csrName.trim()) return;
-      await api.saveScheduleEntry({
-        date: draft.date,
-        store: draft.store,
-        csrName: draft.csrName.trim(),
-        shiftStatus: draft.shiftStatus
-      });
-      state.dashboardDrafts.schedule = state.dashboardDrafts.schedule.filter((row) => row.id !== draft.id);
-      await loadDashboard();
-      renderCurrentTab();
-    };
-
-    document.querySelectorAll('.sched-draft-field').forEach((input) => {
+  function bindLinksActions() {
+    document.querySelectorAll('.link-input').forEach((input) => {
       input.addEventListener('input', () => {
-        const draft = state.dashboardDrafts.schedule.find((row) => String(row.id) === input.dataset.draftId);
-        if (!draft) return;
-        draft[input.dataset.field] = input.value;
-      });
-      input.addEventListener('change', () => {
-        safeRun(async () => { await saveScheduleDraft(input.dataset.draftId); });
+        state.drafts.links[Number(input.dataset.idx)][input.dataset.field] = input.value;
       });
     });
   }
@@ -661,38 +464,22 @@
 
   function bindChecklistActions() {
     const loadBtn = document.getElementById('check-load');
-    if (loadBtn) {
-      loadBtn.addEventListener('click', async () => {
-        state.dateSelected = document.getElementById('check-date').value;
-        state.storeFilter = document.getElementById('check-store').value;
-        await safeRun(async () => { await loadChecklist(); renderCurrentTab(); });
-      });
-    }
-    document.querySelectorAll('.check-toggle').forEach((cb) => {
-      cb.addEventListener('change', async () => {
-        await safeRun(async () => {
-          await api.setChecklistItem({ date: state.checklistData.date, store: state.checklistData.store, task: cb.dataset.task, completed: cb.checked });
-          await Promise.all([loadChecklist(), loadDashboard()]);
-          renderCurrentTab();
-        });
-      });
+    if (loadBtn) loadBtn.onclick = () => safeRun(async () => {
+      state.dateSelected = document.getElementById('check-date').value;
+      state.checklistData = await api.getChecklist(state.dateSelected, document.getElementById('check-store').value);
+      renderCurrentTab();
     });
-  }
-
-  function readFileAsDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    document.querySelectorAll('.check-toggle').forEach((cb) => cb.addEventListener('change', () => safeRun(async () => {
+      await api.setChecklistItem({ date: state.checklistData.date, store: state.checklistData.store, task: cb.dataset.task, completed: cb.checked });
+      state.checklistData = await api.getChecklist(state.checklistData.date, state.checklistData.store);
+      renderCurrentTab();
+    })));
   }
 
   function renderCurrentTab() {
     const target = document.getElementById('tab-content');
     if (state.activeTab === 'dashboard') {
-      target.innerHTML = renderDashboard(state.dashboardData);
-      bindDashboardActions();
+      target.innerHTML = renderDashboard();
       return;
     }
     if (state.activeTab === 'checklist') {
@@ -755,9 +542,28 @@
     } catch (err) {
       document.getElementById('auth-loading').classList.add('hidden');
       document.getElementById('unauthorized').classList.remove('hidden');
-      toast(err.message || 'Failed to start app');
+      return;
     }
+    state.user = auth.email;
+    document.getElementById('user-email').textContent = auth.email;
+    document.getElementById('main-ui').classList.remove('hidden');
+    state.config = Object.assign({}, state.config, await api.getClientConfig());
+    state.dashboardData = await api.getDashboardData();
+    state.links = await api.getAppLinks();
+    state.drafts.links = Object.values(state.links);
+    state.checklistData = await api.getChecklist(state.dateSelected, state.config.defaultStores[0]);
+    await refreshCategoriesAndData();
+
+    setInterval(() => safeRun(async () => {
+      state.dashboardData = await api.getDashboardData();
+      state.links = await api.getAppLinks();
+      await refreshCategoriesAndData();
+    }), state.config.refreshIntervalMs || 300000);
   }
 
-  bootstrap();
+  bootstrap().catch((err) => {
+    document.getElementById('auth-loading').classList.add('hidden');
+    document.getElementById('unauthorized').classList.remove('hidden');
+    toast(err.message || 'Failed to load');
+  });
 </script>
