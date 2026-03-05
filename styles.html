@@ -1,0 +1,128 @@
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #131d33;
+    --panel-2: #1b2742;
+    --text: #f4f8ff;
+    --muted: #9fb0d2;
+    --accent: #62b5ff;
+    --good: #32d583;
+    --warn: #f79009;
+    --danger: #f97066;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Inter, Segoe UI, Arial, sans-serif;
+    background: radial-gradient(circle at top, #182544, var(--bg));
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .hidden { display: none !important; }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: rgba(10, 16, 30, 0.8);
+    backdrop-filter: blur(6px);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand img { width: 86px; height: auto; background: #fff; border-radius: 8px; padding: 4px; }
+  .brand h1 { margin: 0; font-size: 34px; letter-spacing: 0.3px; }
+  .brand p { margin: 6px 0 0; color: var(--muted); }
+
+  .tabs { display: flex; gap: 10px; }
+  .tab {
+    border: 0;
+    font-size: 18px;
+    padding: 12px 20px;
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .tab.active, .tab:hover { background: var(--panel-2); outline: 1px solid rgba(98,181,255,0.55); }
+
+  #tab-content { padding: 20px 24px 30px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 16px;
+  }
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .card h2 { margin: 0 0 12px; font-size: 24px; }
+  .card p { margin: 6px 0; color: var(--muted); }
+  .span-4 { grid-column: span 4; }
+  .span-6 { grid-column: span 6; }
+  .span-8 { grid-column: span 8; }
+  .span-12 { grid-column: span 12; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 17px; }
+  th { color: var(--muted); font-weight: 600; }
+  .number { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .bar-wrap { height: 12px; background: #223357; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .bar { height: 100%; background: linear-gradient(90deg, var(--accent), #76d5ff); }
+
+  .pill { display: inline-block; padding: 5px 10px; border-radius: 999px; font-size: 13px; }
+  .pill.good { background: rgba(50,213,131,0.18); color: var(--good); }
+  .pill.warn { background: rgba(247,144,9,0.2); color: var(--warn); }
+
+  .check-item { display: flex; justify-content: space-between; align-items: center; background: var(--panel); padding: 12px; border-radius: 10px; margin-bottom: 10px; }
+  .check-item label { font-size: 18px; }
+  .progress { height: 12px; background: #223357; border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--good); }
+
+  .auth-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+  .auth-screen h1 { font-size: 52px; margin: 0; }
+  .auth-screen p { font-size: 20px; color: var(--muted); }
+  .skeleton-block { border-radius: 12px; background: linear-gradient(90deg, #18233f 25%, #243456 50%, #18233f 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  .skeleton-block.lg { width: 420px; height: 48px; }
+
+  .toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: #3a1720;
+    color: #ffd2db;
+    border: 1px solid #f97066;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+
+  select, input, button {
+    font: inherit;
+  }
+  select, input {
+    background: #111a2e;
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+
+  @media (max-width: 1400px) {
+    .span-4, .span-6, .span-8 { grid-column: span 12; }
+    .brand h1 { font-size: 26px; }
+  }
+</style>
