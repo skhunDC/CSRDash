@@ -11,7 +11,11 @@
     <div id="app" class="app loading">
       <div id="auth-loading" class="auth-screen">
         <div class="skeleton-block lg"></div>
-        <p>Verifying workspace access...</p>
+        <p id="loading-status">Verifying workspace access...</p>
+        <div class="load-track" aria-label="Loading progress">
+          <div id="loading-bar" class="load-fill" style="width: 0%"></div>
+        </div>
+        <p id="loading-percent" class="caption">0%</p>
       </div>
 
       <div id="unauthorized" class="auth-screen hidden">

@@ -57,6 +57,37 @@ function getClientConfig() {
   };
 }
 
+function getBootstrapPayload(dateIso, store) {
+  authorizeOrThrow_();
+  const db = openDatabase_();
+  const safeDate = dateIso || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const safeStore = isValidStore_(store) ? store : CONFIG.DEFAULT_STORES[0];
+
+  const dashboardData = getDashboardData();
+  const categories = getCompetitionCategoriesFromDb_(db);
+  const categoryData = {};
+  const weekStart = dashboardData.scheduleWeek.weekStart;
+
+  categories.enabled.forEach(function (category) {
+    categoryData[category.categoryKey] = getCompetitionCategoryDataFromDb_(db, category.categoryKey, weekStart, 'All');
+  });
+
+  return {
+    config: {
+      appName: CONFIG.APP_NAME,
+      refreshIntervalMs: CONFIG.REFRESH_INTERVAL_MS,
+      performanceGoal: CONFIG.PERFORMANCE_GOAL,
+      defaultStores: CONFIG.DEFAULT_STORES,
+      isAdmin: true
+    },
+    dashboardData: dashboardData,
+    links: getAppLinksFromDb_(db),
+    categories: categories,
+    categoryData: categoryData,
+    checklist: getChecklist(safeDate, safeStore)
+  };
+}
+
 function getDashboardData() {
   authorizeOrThrow_();
   const cache = CacheService.getScriptCache();
@@ -226,7 +257,10 @@ function saveCompetitionEntry(payload) {
 
 function getCompetitionCategories() {
   authorizeOrThrow_();
-  const db = openDatabase_();
+  return getCompetitionCategoriesFromDb_(openDatabase_());
+}
+
+function getCompetitionCategoriesFromDb_(db) {
   const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES));
   const all = rows.map(function (row) {
     return normalizeCategory_(row);
@@ -268,14 +302,18 @@ function saveCompetitionCategories(payload) {
 
 function getCompetitionCategoryData(categoryKey, dateRange, store) {
   authorizeOrThrow_();
+  const weekStart = dateRange && dateRange.weekStart ? dateRange.weekStart : getWeekStartISO_(new Date());
+  return getCompetitionCategoryDataFromDb_(openDatabase_(), categoryKey, weekStart, store);
+}
+
+function getCompetitionCategoryDataFromDb_(db, categoryKey, weekStart, store) {
   if (!categoryKey) {
     throw new Error('categoryKey is required.');
   }
-  const targetWeek = dateRange && dateRange.weekStart ? dateRange.weekStart : getWeekStartISO_(new Date());
-  const db = openDatabase_();
+
   const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_ENTRIES)).filter(function (row) {
     const sameCategory = row.categoryKey === categoryKey;
-    const sameWeek = row.weekStart === targetWeek;
+    const sameWeek = row.weekStart === weekStart;
     const sameStore = !store || store === 'All' || row.store === store;
     return sameCategory && sameWeek && sameStore;
   });
@@ -295,7 +333,7 @@ function getCompetitionCategoryData(categoryKey, dateRange, store) {
   });
 
   return {
-    weekStart: targetWeek,
+    weekStart: weekStart,
     categoryKey: categoryKey,
     entries: entries,
     leader: entries[0] || null,
@@ -340,7 +378,10 @@ function saveCompetitionEntries(payload) {
 
 function getAppLinks() {
   authorizeOrThrow_();
-  const db = openDatabase_();
+  return getAppLinksFromDb_(openDatabase_());
+}
+
+function getAppLinksFromDb_(db) {
   const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.APP_LINKS));
   return rows.reduce(function (acc, row) {
     if (!row.key) return acc;

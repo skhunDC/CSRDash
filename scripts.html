@@ -1,29 +1,17 @@
 <script>
   const state = {
-    user: null,
+    user: '',
     activeTab: 'dashboard',
     dateSelected: new Date().toISOString().slice(0, 10),
+    storeFilter: 'All',
     config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: [] },
     dashboardData: null,
     checklistData: null,
     categories: { all: [], enabled: [] },
-    links: {},
     categoryData: {},
-    manageMode: {},
+    links: {},
     drafts: { categories: [], links: [], entries: {} },
-    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'] },
-    salesTable: {
-      thisYear: '2026',
-      lastYear: '2025',
-      title: '',
-      titleAuto: true,
-      initialized: false
-    },
-    dashboardDrafts: {
-      performance: [],
-      schedule: []
-    },
-    nextDraftId: 1
+    manageMode: {}
   };
 
   const api = {
@@ -33,25 +21,11 @@
       });
     },
     getAuthStatus() { return this.call('getAuthStatus'); },
-    getClientConfig() { return this.call('getClientConfig'); },
-    getDashboardData() { return this.call('getDashboardData'); },
-    getCompetitionCategories() { return this.call('getCompetitionCategories'); },
-    saveCompetitionCategories(payload) { return this.call('saveCompetitionCategories', [payload]); },
-    getCompetitionCategoryData(categoryKey, dateRange, store) { return this.call('getCompetitionCategoryData', [categoryKey, dateRange, store]); },
-    saveCompetitionEntries(payload) { return this.call('saveCompetitionEntries', [payload]); },
-    getAppLinks() { return this.call('getAppLinks'); },
-    saveAppLinks(payload) { return this.call('saveAppLinks', [payload]); },
-    saveSalesEntry(payload) { return this.call('saveSalesEntry', [payload]); },
-    saveCsrRecognition(payload) { return this.call('saveCsrRecognition', [payload]); },
-    savePerformanceEntry(payload) { return this.call('savePerformanceEntry', [payload]); },
-    saveScheduleEntry(payload) { return this.call('saveScheduleEntry', [payload]); },
+    getBootstrapPayload(dateIso, store) { return this.call('getBootstrapPayload', [dateIso, store]); },
     getChecklist(date, store) { return this.call('getChecklist', [date, store]); },
     setChecklistItem(payload) { return this.call('setChecklistItem', [payload]); },
-    getCompetitionCategories() { return this.call('getCompetitionCategories'); },
-    saveCompetitionCategories(payload) { return this.call('saveCompetitionCategories', [payload]); },
-    getCompetitionCategoryData(categoryKey, dateRange, store) { return this.call('getCompetitionCategoryData', [categoryKey, dateRange, store]); },
     saveCompetitionEntries(payload) { return this.call('saveCompetitionEntries', [payload]); },
-    getAppLinks() { return this.call('getAppLinks'); },
+    saveCompetitionCategories(payload) { return this.call('saveCompetitionCategories', [payload]); },
     saveAppLinks(payload) { return this.call('saveAppLinks', [payload]); }
   };
 
@@ -65,290 +39,132 @@
   const esc = (v) => String(v || '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\'': '&#39;', '"': '&quot;' }[c]));
   const fmt = (n) => Number(n || 0).toLocaleString();
 
-  async function safeRun(task) {
-    try { await task(); } catch (err) { toast(err.message || 'Error'); }
+  function setLoading(step, percent) {
+    document.getElementById('loading-status').textContent = step;
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    document.getElementById('loading-bar').style.width = `${p}%`;
+    document.getElementById('loading-percent').textContent = `${p}%`;
   }
 
-  function getFixedTabs() {
+  function getNavTabs() {
+    const dynamic = (state.categories.enabled || []).map((cat) => ({
+      key: `category:${cat.categoryKey}`,
+      label: `Competition: ${cat.categoryName}`
+    }));
+
     return [
-      { key: 'dashboard', label: 'Dashboard', type: 'fixed' },
-      { key: 'checklist', label: 'Cleaning Checklist', type: 'fixed' },
-      { key: 'metrics_admin', label: 'Metrics Admin', type: 'fixed' },
-      { key: 'links_admin', label: 'Links Admin', type: 'fixed' }
-    ];
-  }
-
-  function buildTabModel() {
-    const categoryTabs = state.categories.enabled.map((cat) => ({ key: `category:${cat.categoryKey}`, label: cat.categoryName, type: 'category', categoryKey: cat.categoryKey }));
-    return [getFixedTabs()[0], ...categoryTabs, ...getFixedTabs().slice(1)];
-  }
-
-  function toast(message) {
-    const node = document.getElementById('toast');
-    node.textContent = message;
-    node.classList.remove('hidden');
-    setTimeout(() => node.classList.add('hidden'), 3500);
-  }
-
-  function safeRun(fn) {
-    return fn().catch((err) => {
-      toast(err.message || 'Server error');
-      console.error(err);
-    });
-  }
-
-  function getNavTabs_() {
-    const dynamic = state.categories.enabled.map((cat) => ({ key: `category:${cat.categoryKey}`, label: cat.categoryName }));
-    return [
-      { key: 'dashboard', label: 'Dashboard' },
+      { key: 'dashboard', label: 'Dashboard Page' },
       ...dynamic,
-      { key: 'checklist', label: 'Cleaning Checklist' },
-      { key: 'metrics_admin', label: 'Metrics Admin' },
-      { key: 'links_admin', label: 'Links Admin' }
+      { key: 'checklist', label: 'Checklist Page' },
+      { key: 'metrics_admin', label: 'Metrics Admin Page' },
+      { key: 'links_admin', label: 'Links Admin Page' }
     ];
   }
 
   function renderTopTabs() {
-    const tabs = getNavTabs_();
+    const tabs = getNavTabs();
     if (!tabs.some((tab) => tab.key === state.activeTab)) {
       state.activeTab = 'dashboard';
     }
-    const nav = document.getElementById('top-tabs');
-    nav.innerHTML = tabs.map((tab) => `<button data-tab="${tab.key}" class="tab ${state.activeTab === tab.key ? 'active' : ''}">${tab.label}</button>`).join('');
+    document.getElementById('top-tabs').innerHTML = tabs
+      .map((tab) => `<button data-tab="${tab.key}" class="tab ${state.activeTab === tab.key ? 'active' : ''}">${esc(tab.label)}</button>`)
+      .join('');
   }
 
   function setupTabs() {
-    const nav = document.getElementById('top-tabs');
-    nav.addEventListener('click', (event) => {
+    document.getElementById('top-tabs').addEventListener('click', (event) => {
       const btn = event.target.closest('[data-tab]');
       if (!btn) return;
       state.activeTab = btn.dataset.tab;
       renderTopTabs();
       renderCurrentTab();
     });
-    if (!tabs.find((t) => t.key === state.activeTab)) {
-      state.activeTab = 'dashboard';
-    }
-  }
-
-  function patioLinkButton(size = '') {
-    const link = state.links.PATIO_CUSHION_SIGNUP || state.dashboardData?.patioCushionSignupLink || { label: 'Patio Cushion Signup Sheet', url: '#' };
-    return `<a class="tab ${size}" href="${esc(link.url)}" target="_blank" rel="noopener">↗ ${esc(link.label || 'Patio Cushion Signup Sheet')}</a>`;
   }
 
   function renderDashboard() {
     const data = state.dashboardData;
-    const comp = (data.competitionsSummary || []).slice(0, 3).map((item) => `<li>${esc(item.metric)}: <strong>${esc(item.leader ? item.leader.csrName : '-')}</strong> (${fmt(item.leader ? item.leader.value : 0)})</li>`).join('');
-    return `
-      <section class="grid">
-        <article class="card span-8">
-          <div class="card-head sales-card-head"><input id="sales-title-input" class="title-input" value="${state.salesTable.title}" aria-label="Sales table title" /><span class="caption">Week of ${data.scheduleWeek.weekStart}</span></div>
-          <div class="row sales-controls"><label class="caption">Last Year <input id="sales-last-year-header" class="year-header-input" value="${state.salesTable.lastYear}" /></label><label class="caption">This Year <input id="sales-this-year-header" class="year-header-input" value="${state.salesTable.thisYear}" /></label><button id="sales-title-reset" class="tab" ${state.salesTable.titleAuto ? 'disabled' : ''}>Reset to auto title</button></div>
-          <p class="caption">Spreadsheet-style: edit cells and tab to auto-save.</p>
-          <table class="data-table editable-table-frame"><thead><tr><th>Store</th><th class="number">${state.salesTable.lastYear}</th><th class="number">${state.salesTable.thisYear}</th><th class="number">Δ ${state.salesTable.thisYear}-${state.salesTable.lastYear}</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
-        </article>
+    const competitionRows = (data.competitionsSummary || []).slice(0, 5)
+      .map((item) => `<tr><td>${esc(item.metric)}</td><td>${esc(item.leader ? item.leader.csr : '-')}</td><td class="number">${fmt(item.leader ? item.leader.value : 0)}</td></tr>`)
+      .join('');
 
-        <article class="card span-4">
-          <h2>CSR of the Week</h2>
-          ${imageMarkup}
-          <div class="stack-sm">
-            <input id="csr-name" placeholder="CSR name" value="${data.csrOfWeek.csrName || ''}" />
-            <select id="csr-store">${(state.config.defaultStores || []).map((s) => `<option ${s === data.csrOfWeek.store ? 'selected' : ''}>${s}</option>`).join('')}</select>
-            <textarea id="csr-quote" rows="3" placeholder="Recognition quote">${data.csrOfWeek.quote || ''}</textarea>
-            <label class="upload-field">CSR image (recommended 320×220)
-              <input id="csr-image" type="file" accept="image/*" />
-            </label>
-            <button id="csr-save" class="tab active">Save CSR of Week</button>
-          </div>
-        </article>
-
-        <article class="card span-6">
-          <h2>CSR $/Hour (Yesterday)</h2>
-          <p>Goal: ${fmtCurrency(data.goalPerHour)}</p>
-          <table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th><th>Trend</th></tr></thead><tbody>${perfRows}${perfDraftRows}</tbody></table>
-          <button id="perf-add-row" class="tab">+ Add Row</button>
-          <div class="row">
-            <input id="perf-csr" placeholder="CSR name" />
-            <select id="perf-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
-            <input id="perf-sales" type="number" min="0" step="1" placeholder="Sales" />
-            <input id="perf-hours" type="number" min="0" step="0.25" placeholder="Hours" />
-            <button id="perf-save" class="tab">Add / Update</button>
-          </div>
-        </article>
-
-        <article class="card span-6">
-          <div class="row"><h2>Weekly Schedule — Who's OFF</h2><select id="dash-store-filter">${stores.map((s) => `<option ${s === state.storeFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-          <p>${data.scheduleWeek.weekStart} → ${data.scheduleWeek.weekEnd}</p>
-          <table class="data-table"><thead><tr><th>Date</th><th>CSR</th><th>Store</th><th>Status</th></tr></thead><tbody>${offRows}${scheduleDraftRows}</tbody></table>
-          <button id="sched-add-row" class="tab">+ Add Row</button>
-          <div class="row">
-            <input id="sched-date" type="date" value="${data.scheduleWeek.weekStart}" />
-            <select id="sched-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
-            <input id="sched-csr" placeholder="CSR name" />
-            <select id="sched-status"><option>OFF</option><option>9a-5p</option><option>10a-6p</option></select>
-            <button id="sched-save" class="tab">Save Schedule</button>
-          </div>
-        </article>
-
-        <article class="card span-6"><h2>Competitions Highlights</h2><div class="row">${patioLinkButton_()}</div>${compCards}</article>
-
-        <article class="card span-6">
-          <h2>Cleaning Checklist Progress</h2>
-          <p>${data.checklistSnapshot.store} — ${data.checklistSnapshot.date}</p>
-          <p>${data.checklistSnapshot.completed} / ${data.checklistSnapshot.total} complete</p>
-          <div class="progress"><div style="width:${Math.round(data.checklistSnapshot.progress * 100)}%"></div></div>
-        </article>
-      </section>`;
+    return `<section class="grid">
+      <article class="card span-8">
+        <h2>Sales Comparison</h2>
+        <p class="caption">Last updated: ${esc(data.generatedAt)}</p>
+        <table class="data-table">
+          <thead><tr><th>Store</th><th class="number">${esc(data.salesComparisonYears.lastYear)}</th><th class="number">${esc(data.salesComparisonYears.thisYear)}</th></tr></thead>
+          <tbody>${(data.salesComparison || []).map((row) => `<tr><td>${esc(row.store)}</td><td class="number">${fmt(row.lastYearSales)}</td><td class="number">${fmt(row.thisYearSales)}</td></tr>`).join('')}</tbody>
+        </table>
+      </article>
+      <article class="card span-4">
+        <h2>CSR of the Week</h2>
+        <p><strong>${esc(data.csrOfWeek.csrName || 'TBD')}</strong></p>
+        <p>${esc(data.csrOfWeek.store || '-')}</p>
+        <p>${esc(data.csrOfWeek.quote || '')}</p>
+      </article>
+      <article class="card span-6">
+        <h2>Competition Highlights</h2>
+        <table class="data-table"><thead><tr><th>Category</th><th>Leader</th><th class="number">Value</th></tr></thead><tbody>${competitionRows || '<tr><td colspan="3">No data</td></tr>'}</tbody></table>
+      </article>
+      <article class="card span-6">
+        <h2>Cleaning Checklist Progress</h2>
+        <p>${esc(data.checklistSnapshot.store)} — ${esc(data.checklistSnapshot.date)}</p>
+        <p>${fmt(data.checklistSnapshot.completed)} / ${fmt(data.checklistSnapshot.total)} complete</p>
+        <div class="progress"><div style="width:${Math.round((data.checklistSnapshot.progress || 0) * 100)}%"></div></div>
+      </article>
+    </section>`;
   }
 
-  function patioLinkButton_() {
-    const link = state.links.PATIO_CUSHION_SIGNUP || state.dashboardData.patioCushionSignupLink || { label: 'Patio Cushion Signup Sheet', url: '#' };
-    return `<a class="tab" href="${link.url}" target="_blank" rel="noopener">↗ ${link.label}</a>`;
+  function renderChecklist(data) {
+    return `<section class="card">
+      <div class="row">
+        <h2>Checklist Page</h2>
+        <input id="check-date" type="date" value="${esc(data.date)}" />
+        <select id="check-store">${(state.config.defaultStores || []).map((s) => `<option ${s === data.store ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
+        <button id="check-load" class="tab">Load</button>
+      </div>
+      <div class="stack-sm">${(data.items || []).map((item) => `<label class="check-item"><span>${esc(item.task)}</span><input class="check-toggle" data-task="${esc(item.task)}" type="checkbox" ${item.completed ? 'checked' : ''}/></label>`).join('')}</div>
+    </section>`;
   }
 
   function renderCategoryTab(categoryKey) {
-    const category = state.categories.all.find((item) => item.categoryKey === categoryKey) || { categoryName: categoryKey };
-    const data = state.categoryData[categoryKey] || { entries: [], lastUpdated: '' };
-    const isManage = !!state.manageMode[categoryKey];
-    const rows = (data.entries || []).map((entry, idx) => {
-      const isLeader = data.leader && data.leader.csr === entry.csr && Number(data.leader.value) === Number(entry.value);
-      return `<tr class="${isLeader ? 'leader-row' : ''}"><td>${entry.csr}</td><td>${entry.store || '-'}</td><td class="number">${isManage ? `<input class="cell-input comp-input" data-category="${categoryKey}" data-idx="${idx}" data-field="value" type="number" value="${Number(entry.value || 0)}" />` : Number(entry.value || 0)}</td><td>${isManage ? `<input class="cell-input comp-input" data-category="${categoryKey}" data-idx="${idx}" data-field="notes" value="${entry.notes || ''}" />` : (entry.notes || '')}</td></tr>`;
-    }).join('');
-
-    return `<section class="card"><div class="row"><h2>${category.categoryName}</h2><button id="category-manage-toggle" class="tab">${isManage ? 'TV View' : 'Manage'}</button><button id="category-save" class="tab ${isManage ? '' : 'hidden'}">Save</button><span class="caption">Last updated: ${data.lastUpdated || '-'}</span></div><div class="row">${patioLinkButton_()}</div><table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No entries yet.</td></tr>'}</tbody></table></section>`;
+    const category = state.categories.all.find((c) => c.categoryKey === categoryKey) || { categoryName: categoryKey };
+    const data = state.categoryData[categoryKey] || { entries: [] };
+    const manage = !!state.manageMode[categoryKey];
+    const rows = (data.entries || []).map((entry, idx) => `<tr><td>${esc(entry.csr)}</td><td>${esc(entry.store)}</td><td class="number">${manage ? `<input class="comp-input cell-input" type="number" data-idx="${idx}" data-field="value" value="${Number(entry.value || 0)}">` : fmt(entry.value)}</td><td>${manage ? `<input class="comp-input" data-idx="${idx}" data-field="notes" value="${esc(entry.notes)}">` : esc(entry.notes)}</td></tr>`).join('');
+    return `<section class="card"><div class="row"><h2>${esc(category.categoryName)} Page</h2><button id="category-manage-toggle" class="tab">${manage ? 'View Mode' : 'Manage Mode'}</button><button id="category-save" class="tab ${manage ? '' : 'hidden'}">Save</button></div><table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No entries.</td></tr>'}</tbody></table></section>`;
   }
 
   function renderMetricsAdmin() {
-    const rows = state.drafts.categories.map((item, idx) => `<tr><td><input class="metric-input" data-idx="${idx}" data-field="categoryKey" value="${item.categoryKey || ''}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="categoryName" value="${item.categoryName || ''}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="enabled" type="checkbox" ${item.enabled ? 'checked' : ''} /></td><td><input class="metric-input" data-idx="${idx}" data-field="sortOrder" type="number" value="${Number(item.sortOrder || 0)}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="goal" value="${item.goal || ''}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="notes" value="${item.notes || ''}" /></td></tr>`).join('');
-    return `<section class="card"><div class="row"><h2>Metrics Admin</h2><button id="metric-add" class="tab">Add Category</button><button id="metric-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>CategoryKey</th><th>CategoryName</th><th>Enabled</th><th>SortOrder</th><th>Goal</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    const rows = state.drafts.categories.map((row, idx) => `<tr><td><input class="metric-input" data-idx="${idx}" data-field="categoryKey" value="${esc(row.categoryKey)}"></td><td><input class="metric-input" data-idx="${idx}" data-field="categoryName" value="${esc(row.categoryName)}"></td><td><input class="metric-input" data-idx="${idx}" data-field="enabled" type="checkbox" ${row.enabled ? 'checked' : ''}></td></tr>`).join('');
+    return `<section class="card"><div class="row"><h2>Metrics Admin Page</h2><button id="metric-add" class="tab">Add Category</button><button id="metric-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>Category Key</th><th>Category Name</th><th>Enabled</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }
 
   function renderLinksAdmin() {
-    const rows = state.drafts.links.map((item, idx) => `<tr><td>${item.key}</td><td><input class="link-input" data-idx="${idx}" data-field="label" value="${item.label || ''}" /></td><td><input class="link-input" data-idx="${idx}" data-field="url" value="${item.url || ''}" /></td></tr>`).join('');
-    return `<section class="card"><div class="row"><h2>Links Admin</h2><button id="links-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>Key</th><th>Label</th><th>URL</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    const rows = state.drafts.links.map((item, idx) => `<tr><td>${esc(item.key)}</td><td><input class="link-input" data-idx="${idx}" data-field="label" value="${esc(item.label)}"></td><td><input class="link-input" data-idx="${idx}" data-field="url" value="${esc(item.url)}"></td></tr>`).join('');
+    return `<section class="card"><div class="row"><h2>Links Admin Page</h2><button id="links-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>Key</th><th>Label</th><th>URL</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }
 
-  function renderMetricsAdmin() {
-    const rows = state.drafts.categories.map((row, idx) => `<tr>
-      <td><input data-idx="${idx}" data-field="categoryKey" class="metric-input" value="${esc(row.categoryKey)}"/></td>
-      <td><input data-idx="${idx}" data-field="categoryName" class="metric-input" value="${esc(row.categoryName)}"/></td>
-      <td><input data-idx="${idx}" data-field="enabled" class="metric-input" type="checkbox" ${row.enabled ? 'checked' : ''}/></td>
-      <td><input data-idx="${idx}" data-field="sortOrder" class="metric-input" type="number" value="${Number(row.sortOrder || 0)}"/></td>
-      <td><input data-idx="${idx}" data-field="goal" class="metric-input" value="${esc(row.goal || '')}"/></td>
-      <td><input data-idx="${idx}" data-field="notes" class="metric-input" value="${esc(row.notes || '')}"/></td>
-    </tr>`).join('');
-    return `<section class="card"><div class="row"><h2>Metrics Admin</h2><button id="metric-add" class="tab">Add Category</button><button id="metric-save" class="tab">Save</button></div>
-      <table class="data-table"><thead><tr><th>CategoryKey</th><th>CategoryName</th><th>Enabled</th><th>SortOrder</th><th>Goal</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></section>`;
-  }
-
-  async function loadDashboard() { state.dashboardData = await api.getDashboardData(); }
-  async function loadChecklist() {
-    const store = state.storeFilter === 'All' ? (state.config.defaultStores[0] || 'Plant') : state.storeFilter;
-    state.checklistData = await api.getChecklist(state.dateSelected, store);
-  }
-
-  async function refreshCompetitionModel() {
-    state.categories = await api.getCompetitionCategories();
-    state.drafts.categories = JSON.parse(JSON.stringify(state.categories.all || []));
-    for (const category of state.categories.enabled || []) {
-      state.categoryData[category.categoryKey] = await api.getCompetitionCategoryData(category.categoryKey, { weekStart: state.dashboardData.scheduleWeek.weekStart }, 'All');
-    }
-    state.drafts.entries = {};
-    renderTopTabs();
-  }
-
-  function bindDashboardActions() {
-    const syncSalesTitle = () => {
-      if (!state.salesTable.titleAuto) return;
-      state.salesTable.title = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
-      const input = document.getElementById('sales-title-input');
-      if (input) input.value = state.salesTable.title;
-    };
-
-    const updateSalesRowPresentation = (row) => {
-      const thisInput = row.querySelector('.sales-this-year');
-      const lastInput = row.querySelector('.sales-last-year');
-      const deltaNode = row.querySelector('.delta-value');
-      const trendNode = row.querySelector('.trend-cell');
-      if (!thisInput || !lastInput || !deltaNode || !trendNode) return;
-
-      const thisVal = Number(thisInput.value || 0);
-      const lastVal = Number(lastInput.value || 0);
-      const delta = thisVal - lastVal;
-      const deltaPct = lastVal ? delta / lastVal : 0;
-      deltaNode.classList.remove('trend-positive', 'trend-negative', 'trend-neutral');
-      deltaNode.classList.add(getTrendClass(delta));
-      deltaNode.textContent = `${withDeltaSign(delta)} (${fmtPercent(deltaPct)})`;
-
-      const trendClass = getTrendClass(delta);
-      const trendLabel = delta > 0 ? 'Up' : delta < 0 ? 'Down' : 'Flat';
-      trendNode.innerHTML = `<span class="pill ${delta > 0 ? 'good' : delta < 0 ? 'bad' : 'neutral'}">${trendLabel}</span>${buildTrendLineSvg(lastVal, thisVal)}`;
-      const svg = trendNode.querySelector('.trend-graph');
-      if (svg) {
-        svg.classList.remove('trend-positive', 'trend-negative', 'trend-neutral');
-        svg.classList.add(trendClass);
-      }
-    };
-
-    const select = document.getElementById('dash-store-filter');
-    if (select) {
-      select.addEventListener('change', () => {
-        state.storeFilter = select.value;
-        renderCurrentTab();
-      });
+  function bindChecklistActions() {
+    const loadBtn = document.getElementById('check-load');
+    if (loadBtn) {
+      loadBtn.onclick = async () => {
+        try {
+          state.dateSelected = document.getElementById('check-date').value;
+          const store = document.getElementById('check-store').value;
+          state.checklistData = await api.getChecklist(state.dateSelected, store);
+          renderCurrentTab();
+        } catch (err) { toast(err.message || 'Unable to load checklist'); }
+      };
     }
 
-  function bindCategoryActions(categoryKey) {
-    const toggle = document.getElementById('toggle-manage');
-    if (toggle) toggle.onclick = () => { state.manageMode[categoryKey] = !state.manageMode[categoryKey]; renderCurrentTab(); };
-    document.querySelectorAll('.comp-input').forEach((input) => {
-      input.addEventListener('input', () => {
-        const draft = state.drafts.entries[categoryKey] || (state.drafts.entries[categoryKey] = JSON.parse(JSON.stringify(state.categoryData[categoryKey].entries || [])));
-        const idx = Number(input.dataset.idx);
-        draft[idx][input.dataset.field] = input.dataset.field === 'value' ? Number(input.value || 0) : input.value;
-      });
-    });
-    const save = document.getElementById('save-entries');
-    if (save) save.onclick = () => safeRun(async () => {
-      const draft = state.drafts.entries[categoryKey] || state.categoryData[categoryKey].entries;
-      await api.saveCompetitionEntries({ entries: draft.map((row) => ({ weekStart: state.categoryData[categoryKey].weekStart, store: row.store || '', csr: row.csr, categoryKey, value: Number(row.value || 0), notes: row.notes || '' })) });
-      state.categoryData[categoryKey] = await api.getCompetitionCategoryData(categoryKey, { weekStart: state.categoryData[categoryKey].weekStart }, 'All');
-      state.dashboardData = await api.getDashboardData();
-      toast('Competition entries saved.');
-      renderCurrentTab();
-    });
-  }
-
-  function bindMetricsActions() {
-    document.getElementById('metric-add').onclick = () => {
-      state.drafts.categories.push({ categoryKey: '', categoryName: 'New Category', enabled: true, sortOrder: state.drafts.categories.length + 1, goal: '', notes: '' });
-      renderCurrentTab();
-    };
-    document.querySelectorAll('.metric-input').forEach((input) => {
-      input.addEventListener('input', () => {
-        const row = state.drafts.categories[Number(input.dataset.idx)];
-        row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
-      });
-      input.addEventListener('change', () => {
-        const row = state.drafts.categories[Number(input.dataset.idx)];
-        row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
-      });
-    });
-    document.getElementById('metric-save').onclick = () => safeRun(async () => {
-      await api.saveCompetitionCategories({ categories: state.drafts.categories });
-      await refreshCategoriesAndData();
-      toast('Categories saved.');
-    });
-  }
-
-  function isValidUrl(url) {
-    return /^https?:\/\//i.test(String(url || ''));
-  }
-
-  function bindLinksActions() {
-    document.querySelectorAll('.link-input').forEach((input) => {
-      input.addEventListener('input', () => {
-        state.drafts.links[Number(input.dataset.idx)][input.dataset.field] = input.value;
+    document.querySelectorAll('.check-toggle').forEach((cb) => {
+      cb.addEventListener('change', async () => {
+        try {
+          await api.setChecklistItem({ date: state.checklistData.date, store: state.checklistData.store, task: cb.dataset.task, completed: cb.checked });
+        } catch (err) {
+          toast(err.message || 'Unable to save checklist item');
+        }
       });
     });
   }
@@ -356,87 +172,69 @@
   function bindCategoryActions(categoryKey) {
     const toggle = document.getElementById('category-manage-toggle');
     if (toggle) {
-      toggle.addEventListener('click', () => {
+      toggle.onclick = () => {
         state.manageMode[categoryKey] = !state.manageMode[categoryKey];
         renderCurrentTab();
-      });
+      };
     }
 
     document.querySelectorAll('.comp-input').forEach((input) => {
       input.addEventListener('input', () => {
-        const rows = state.drafts.entries[categoryKey] || (state.drafts.entries[categoryKey] = JSON.parse(JSON.stringify((state.categoryData[categoryKey] && state.categoryData[categoryKey].entries) || [])));
-        const idx = Number(input.dataset.idx);
-        rows[idx][input.dataset.field] = input.dataset.field === 'value' ? Number(input.value || 0) : input.value;
+        const draft = state.drafts.entries[categoryKey] || (state.drafts.entries[categoryKey] = JSON.parse(JSON.stringify(state.categoryData[categoryKey].entries || [])));
+        draft[Number(input.dataset.idx)][input.dataset.field] = input.dataset.field === 'value' ? Number(input.value || 0) : input.value;
       });
     });
 
     const saveBtn = document.getElementById('category-save');
     if (saveBtn) {
-      saveBtn.addEventListener('click', async () => {
-        await safeRun(async () => {
-          const rows = state.drafts.entries[categoryKey] || state.categoryData[categoryKey].entries || [];
-          await api.saveCompetitionEntries({
-            entries: rows.map((row) => ({
-              weekStart: state.categoryData[categoryKey].weekStart,
-              store: row.store || '',
-              csr: row.csr,
-              categoryKey: categoryKey,
-              value: Number(row.value || 0),
-              notes: row.notes || ''
-            }))
-          });
-          await Promise.all([
-            loadDashboard(),
-            refreshCompetitionModel()
-          ]);
+      saveBtn.onclick = async () => {
+        try {
+          const draftRows = state.drafts.entries[categoryKey] || state.categoryData[categoryKey].entries || [];
+          await api.saveCompetitionEntries({ entries: draftRows.map((row) => ({ weekStart: state.categoryData[categoryKey].weekStart, store: row.store || '', csr: row.csr, categoryKey, value: Number(row.value || 0), notes: row.notes || '' })) });
+          const payload = await api.getBootstrapPayload(state.dateSelected, state.storeFilter);
+          hydrateState(payload);
+          renderTopTabs();
           renderCurrentTab();
           toast('Competition entries saved.');
-        });
-      });
+        } catch (err) { toast(err.message || 'Unable to save entries'); }
+      };
     }
   }
 
   function bindMetricsAdminActions() {
     const addBtn = document.getElementById('metric-add');
     if (addBtn) {
-      addBtn.addEventListener('click', () => {
-        state.drafts.categories.push({
-          categoryKey: '',
-          categoryName: 'New Category',
-          enabled: true,
-          sortOrder: state.drafts.categories.length + 1,
-          goal: '',
-          notes: ''
-        });
+      addBtn.onclick = () => {
+        state.drafts.categories.push({ categoryKey: '', categoryName: 'New Category', enabled: true });
         renderCurrentTab();
-      });
+      };
     }
 
     document.querySelectorAll('.metric-input').forEach((input) => {
-      const setValue = () => {
+      const setVal = () => {
         const row = state.drafts.categories[Number(input.dataset.idx)];
         row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
       };
-      input.addEventListener('input', setValue);
-      input.addEventListener('change', setValue);
+      input.addEventListener('input', setVal);
+      input.addEventListener('change', setVal);
     });
 
     const saveBtn = document.getElementById('metric-save');
     if (saveBtn) {
-      saveBtn.addEventListener('click', async () => {
-        await safeRun(async () => {
+      saveBtn.onclick = async () => {
+        try {
           await api.saveCompetitionCategories({ categories: state.drafts.categories });
-          await Promise.all([loadDashboard(), refreshCompetitionModel()]);
+          const payload = await api.getBootstrapPayload(state.dateSelected, state.storeFilter);
+          hydrateState(payload);
+          renderTopTabs();
           renderCurrentTab();
           toast('Categories saved.');
-        });
-      });
+        } catch (err) { toast(err.message || 'Unable to save categories'); }
+      };
     }
   }
 
   function bindLinksAdminActions() {
-    const isValidUrl = (url) => /^https?:\/\//i.test(String(url || ''));
-
     document.querySelectorAll('.link-input').forEach((input) => {
       input.addEventListener('input', () => {
         state.drafts.links[Number(input.dataset.idx)][input.dataset.field] = input.value;
@@ -445,35 +243,14 @@
 
     const saveBtn = document.getElementById('links-save');
     if (saveBtn) {
-      saveBtn.addEventListener('click', async () => {
-        await safeRun(async () => {
-          state.drafts.links.forEach((row) => {
-            if (!isValidUrl(row.url)) {
-              throw new Error('Invalid URL for ' + row.key);
-            }
-          });
+      saveBtn.onclick = async () => {
+        try {
           state.links = await api.saveAppLinks({ links: state.drafts.links });
           state.drafts.links = Object.values(state.links);
-          await loadDashboard();
-          renderCurrentTab();
           toast('Links saved.');
-        });
-      });
+        } catch (err) { toast(err.message || 'Unable to save links'); }
+      };
     }
-  }
-
-  function bindChecklistActions() {
-    const loadBtn = document.getElementById('check-load');
-    if (loadBtn) loadBtn.onclick = () => safeRun(async () => {
-      state.dateSelected = document.getElementById('check-date').value;
-      state.checklistData = await api.getChecklist(state.dateSelected, document.getElementById('check-store').value);
-      renderCurrentTab();
-    });
-    document.querySelectorAll('.check-toggle').forEach((cb) => cb.addEventListener('change', () => safeRun(async () => {
-      await api.setChecklistItem({ date: state.checklistData.date, store: state.checklistData.store, task: cb.dataset.task, completed: cb.checked });
-      state.checklistData = await api.getChecklist(state.checklistData.date, state.checklistData.store);
-      renderCurrentTab();
-    })));
   }
 
   function renderCurrentTab() {
@@ -497,73 +274,70 @@
       bindLinksAdminActions();
       return;
     }
-    if (state.activeTab.indexOf('category:') === 0) {
+    if (state.activeTab.startsWith('category:')) {
       const categoryKey = state.activeTab.split(':')[1];
       target.innerHTML = renderCategoryTab(categoryKey);
       bindCategoryActions(categoryKey);
       return;
     }
-    state.activeTab = 'dashboard';
-    renderTopTabs();
-    target.innerHTML = renderDashboard(state.dashboardData);
-    bindDashboardActions();
+  }
+
+  function hydrateState(payload) {
+    state.config = Object.assign({}, state.config, payload.config || {});
+    state.dashboardData = payload.dashboardData;
+    state.checklistData = payload.checklist;
+    state.categories = payload.categories;
+    state.categoryData = payload.categoryData || {};
+    state.links = payload.links || {};
+    state.drafts.links = Object.values(state.links);
+    state.drafts.categories = JSON.parse(JSON.stringify((state.categories && state.categories.all) || []));
   }
 
   async function bootstrap() {
     try {
+      setLoading('Checking access', 10);
       const auth = await api.getAuthStatus();
-      document.getElementById('auth-loading').classList.add('hidden');
       if (!auth.authorized) {
+        document.getElementById('auth-loading').classList.add('hidden');
         document.getElementById('unauthorized').classList.remove('hidden');
-        document.getElementById('main-ui').classList.add('hidden');
         return;
       }
 
       state.user = auth.email;
       document.getElementById('user-email').textContent = auth.email;
-      document.getElementById('main-ui').classList.remove('hidden');
-      setupTabs();
+      setLoading('Loading dashboard data', 45);
 
-      state.config = Object.assign({}, state.config, await api.getClientConfig());
-      state.links = await api.getAppLinks();
-      state.drafts.links = Object.values(state.links);
-      await Promise.all([loadDashboard(), loadChecklist()]);
-      await refreshCompetitionModel();
+      const payload = await api.getBootstrapPayload(state.dateSelected, state.storeFilter);
+      hydrateState(payload);
+      setLoading('Rendering pages and navigation', 80);
+
+      setupTabs();
       renderTopTabs();
       renderCurrentTab();
 
-      setInterval(() => safeRun(async () => {
-        state.links = await api.getAppLinks();
-        state.drafts.links = Object.values(state.links);
-        await Promise.all([loadDashboard(), loadChecklist()]);
-        await refreshCompetitionModel();
-        renderCurrentTab();
-      }), state.config.refreshIntervalMs || 5 * 60 * 1000);
+      setLoading('Complete', 100);
+      setTimeout(() => {
+        document.getElementById('auth-loading').classList.add('hidden');
+        document.getElementById('main-ui').classList.remove('hidden');
+      }, 150);
+
+      setInterval(async () => {
+        try {
+          const refresh = await api.getBootstrapPayload(state.dateSelected, state.storeFilter);
+          hydrateState(refresh);
+          renderTopTabs();
+          renderCurrentTab();
+        } catch (err) {
+          console.error(err);
+        }
+      }, state.config.refreshIntervalMs || 5 * 60 * 1000);
     } catch (err) {
+      console.error(err);
       document.getElementById('auth-loading').classList.add('hidden');
       document.getElementById('unauthorized').classList.remove('hidden');
-      return;
+      toast(err.message || 'Failed to load dashboard');
     }
-    state.user = auth.email;
-    document.getElementById('user-email').textContent = auth.email;
-    document.getElementById('main-ui').classList.remove('hidden');
-    state.config = Object.assign({}, state.config, await api.getClientConfig());
-    state.dashboardData = await api.getDashboardData();
-    state.links = await api.getAppLinks();
-    state.drafts.links = Object.values(state.links);
-    state.checklistData = await api.getChecklist(state.dateSelected, state.config.defaultStores[0]);
-    await refreshCategoriesAndData();
-
-    setInterval(() => safeRun(async () => {
-      state.dashboardData = await api.getDashboardData();
-      state.links = await api.getAppLinks();
-      await refreshCategoriesAndData();
-    }), state.config.refreshIntervalMs || 300000);
   }
 
-  bootstrap().catch((err) => {
-    document.getElementById('auth-loading').classList.add('hidden');
-    document.getElementById('unauthorized').classList.remove('hidden');
-    toast(err.message || 'Failed to load');
-  });
+  bootstrap();
 </script>
