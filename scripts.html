@@ -7,7 +7,14 @@
     dashboardData: null,
     competitionsData: null,
     checklistData: null,
-    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Dublin', 'Pleasanton', 'San Ramon'] }
+    config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Dublin', 'Pleasanton', 'San Ramon'] },
+    salesTable: {
+      thisYear: '2026',
+      lastYear: '2025',
+      title: '',
+      titleAuto: true,
+      initialized: false
+    }
   };
 
   const api = {
@@ -30,8 +37,61 @@
     setChecklistItem(payload) { return this.call('setChecklistItem', [payload]); }
   };
 
-  const fmtCurrency = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n || 0));
+  const fmtCurrency = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
   const fmtPercent = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
+  const defaultSalesTitle = (thisYear, lastYear) => `Sales Week ${thisYear} vs ${lastYear}`;
+
+  function withDeltaSign(amount) {
+    const absolute = fmtCurrency(Math.abs(amount));
+    if (amount > 0) return `+${absolute}`;
+    if (amount < 0) return `-${absolute}`;
+    return absolute;
+  }
+
+  function getTrendClass(value) {
+    if (value > 0) return 'trend-positive';
+    if (value < 0) return 'trend-negative';
+    return 'trend-neutral';
+  }
+
+  function buildTrendLineSvg(previousYearValue, thisYearValue) {
+    const width = 120;
+    const height = 30;
+    const left = 10;
+    const right = width - 10;
+    const top = 6;
+    const bottom = height - 6;
+    const max = Math.max(previousYearValue, thisYearValue, 1);
+    const yFor = (value) => bottom - ((value / max) * (bottom - top));
+    const y1 = yFor(previousYearValue);
+    const y2 = yFor(thisYearValue);
+    const trendClass = getTrendClass(thisYearValue - previousYearValue);
+
+    return `<svg class="trend-graph ${trendClass}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Trend line">
+      <line class="trend-baseline" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"></line>
+      <polyline class="trend-path" points="${left},${y1} ${right},${y2}"></polyline>
+      <circle class="trend-point" cx="${left}" cy="${y1}" r="2.8"></circle>
+      <circle class="trend-point" cx="${right}" cy="${y2}" r="2.8"></circle>
+    </svg>`;
+  }
+
+  function hydrateSalesTableState(data) {
+    const serverThisYear = String((data.salesComparisonYears && data.salesComparisonYears.thisYear) || 2026);
+    const serverLastYear = String((data.salesComparisonYears && data.salesComparisonYears.lastYear) || 2025);
+
+    if (!state.salesTable.initialized) {
+      state.salesTable.thisYear = serverThisYear;
+      state.salesTable.lastYear = serverLastYear;
+      state.salesTable.initialized = true;
+    }
+
+    if (state.salesTable.titleAuto) {
+      state.salesTable.title = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
+    } else if (!state.salesTable.title) {
+      state.salesTable.title = defaultSalesTitle(serverThisYear, serverLastYear);
+      state.salesTable.titleAuto = true;
+    }
+  }
 
   function toast(message) {
     const node = document.getElementById('toast');
@@ -61,19 +121,20 @@
   }
 
   function renderDashboard(data) {
+    hydrateSalesTableState(data);
     const stores = ['All'].concat(state.config.defaultStores || []);
     const filteredOff = data.scheduleWeek.offList.filter((row) => state.storeFilter === 'All' || row.store === state.storeFilter);
     const imageMarkup = data.csrOfWeek.imageUrl ? `<img src="${data.csrOfWeek.imageUrl}" alt="CSR of the week" class="csr-week-image" />` : '';
 
     const salesRows = data.salesComparison.map((row) => {
       const growth = row.deltaPct >= 0;
-      const pctWidth = Math.min(100, Math.abs(row.deltaPct) * 100);
+      const deltaClass = getTrendClass(row.delta);
       return `<tr>
         <td>${row.store}</td>
-        <td class="number"><input class="cell-input number sales-input" data-store="${row.store}" data-year="2025" type="number" value="${Number(row.sales2025 || 0)}" /></td>
-        <td class="number"><input class="cell-input number sales-input" data-store="${row.store}" data-year="2026" type="number" value="${Number(row.sales2026 || 0)}" /></td>
-        <td class="number">${fmtCurrency(row.delta)} (${fmtPercent(row.deltaPct)})</td>
-        <td><span class="pill ${growth ? 'good' : 'warn'}">${growth ? 'Up' : 'Down'}</span><div class="bar-wrap"><div class="bar" style="width:${pctWidth}%;opacity:${growth ? '1' : '.45'}"></div></div></td>
+        <td class="number"><input class="cell-input number sales-input sales-last-year" data-store="${row.store}" data-slot="lastYear" type="number" value="${Number(row.salesLastYear || 0)}" /></td>
+        <td class="number"><input class="cell-input number sales-input sales-this-year" data-store="${row.store}" data-slot="thisYear" type="number" value="${Number(row.salesThisYear || 0)}" /></td>
+        <td class="number delta-value ${deltaClass}">${withDeltaSign(row.delta)} (${fmtPercent(row.deltaPct)})</td>
+        <td class="trend-cell"><span class="pill ${growth ? 'good' : 'bad'}">${growth ? 'Up' : 'Down'}</span>${buildTrendLineSvg(Number(row.salesLastYear || 0), Number(row.salesThisYear || 0))}</td>
       </tr>`;
     }).join('');
 
@@ -88,9 +149,10 @@
     return `
       <section class="grid">
         <article class="card span-8">
-          <div class="card-head"><h2>Sales Week 2026 vs 2025</h2><span class="caption">Week of ${data.scheduleWeek.weekStart}</span></div>
+          <div class="card-head sales-card-head"><input id="sales-title-input" class="title-input" value="${state.salesTable.title}" aria-label="Sales table title" /><span class="caption">Week of ${data.scheduleWeek.weekStart}</span></div>
+          <div class="row sales-controls"><label class="caption">Last Year <input id="sales-last-year-header" class="year-header-input" value="${state.salesTable.lastYear}" /></label><label class="caption">This Year <input id="sales-this-year-header" class="year-header-input" value="${state.salesTable.thisYear}" /></label><button id="sales-title-reset" class="tab" ${state.salesTable.titleAuto ? 'disabled' : ''}>Reset to auto title</button></div>
           <p class="caption">Spreadsheet-style: edit cells and tab to auto-save.</p>
-          <table><thead><tr><th>Store</th><th class="number">2025</th><th class="number">2026</th><th class="number">Delta</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
+          <table class="editable-table-frame"><thead><tr><th>Store</th><th class="number">${state.salesTable.lastYear}</th><th class="number">${state.salesTable.thisYear}</th><th class="number">Delta</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
         </article>
 
         <article class="card span-4">
@@ -183,6 +245,38 @@
   }
 
   function bindDashboardActions() {
+    const syncSalesTitle = () => {
+      if (!state.salesTable.titleAuto) return;
+      state.salesTable.title = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
+      const input = document.getElementById('sales-title-input');
+      if (input) input.value = state.salesTable.title;
+    };
+
+    const updateSalesRowPresentation = (row) => {
+      const thisInput = row.querySelector('.sales-this-year');
+      const lastInput = row.querySelector('.sales-last-year');
+      const deltaNode = row.querySelector('.delta-value');
+      const trendNode = row.querySelector('.trend-cell');
+      if (!thisInput || !lastInput || !deltaNode || !trendNode) return;
+
+      const thisVal = Number(thisInput.value || 0);
+      const lastVal = Number(lastInput.value || 0);
+      const delta = thisVal - lastVal;
+      const deltaPct = lastVal ? delta / lastVal : 0;
+      deltaNode.classList.remove('trend-positive', 'trend-negative', 'trend-neutral');
+      deltaNode.classList.add(getTrendClass(delta));
+      deltaNode.textContent = `${withDeltaSign(delta)} (${fmtPercent(deltaPct)})`;
+
+      const trendClass = getTrendClass(delta);
+      const trendLabel = delta > 0 ? 'Up' : delta < 0 ? 'Down' : 'Flat';
+      trendNode.innerHTML = `<span class="pill ${delta > 0 ? 'good' : delta < 0 ? 'bad' : 'neutral'}">${trendLabel}</span>${buildTrendLineSvg(lastVal, thisVal)}`;
+      const svg = trendNode.querySelector('.trend-graph');
+      if (svg) {
+        svg.classList.remove('trend-positive', 'trend-negative', 'trend-neutral');
+        svg.classList.add(trendClass);
+      }
+    };
+
     const select = document.getElementById('dash-store-filter');
     if (select) {
       select.addEventListener('change', () => {
@@ -192,17 +286,56 @@
     }
 
     document.querySelectorAll('.sales-input').forEach((input) => {
+      input.addEventListener('input', () => {
+        updateSalesRowPresentation(input.closest('tr'));
+      });
       input.addEventListener('change', async () => {
         await safeRun(async () => {
+          const year = input.dataset.slot === 'thisYear' ? Number(state.salesTable.thisYear) : Number(state.salesTable.lastYear);
+          if (!Number.isFinite(year)) throw new Error('Year headers must be numeric before saving sales values.');
           await api.saveSalesEntry({
             weekStart: state.dashboardData.scheduleWeek.weekStart,
             store: input.dataset.store,
-            year: Number(input.dataset.year),
+            year,
             sales: Number(input.value || 0)
           });
           await loadDashboard();
           renderCurrentTab();
         });
+      });
+    });
+
+    const titleInput = document.getElementById('sales-title-input');
+    const resetBtn = document.getElementById('sales-title-reset');
+    const thisYearInput = document.getElementById('sales-this-year-header');
+    const lastYearInput = document.getElementById('sales-last-year-header');
+
+    if (titleInput) {
+      titleInput.addEventListener('input', () => {
+        state.salesTable.title = titleInput.value;
+        const expected = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
+        state.salesTable.titleAuto = titleInput.value === expected;
+        if (resetBtn) resetBtn.disabled = state.salesTable.titleAuto;
+      });
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        state.salesTable.titleAuto = true;
+        state.salesTable.title = defaultSalesTitle(state.salesTable.thisYear, state.salesTable.lastYear);
+        renderCurrentTab();
+      });
+    }
+
+    [
+      { input: thisYearInput, key: 'thisYear' },
+      { input: lastYearInput, key: 'lastYear' }
+    ].forEach((entry) => {
+      if (!entry.input) return;
+      entry.input.addEventListener('change', () => {
+        state.salesTable[entry.key] = entry.input.value.trim();
+        syncSalesTitle();
+        renderCurrentTab();
       });
     });
 

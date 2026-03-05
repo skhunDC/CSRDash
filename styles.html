@@ -7,7 +7,7 @@
     --muted: #9fb0d2;
     --accent: #62b5ff;
     --good: #32d583;
-    --warn: #f79009;
+    --warn: #f97066;
     --danger: #f97066;
     --radius: 16px;
     --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
@@ -52,6 +52,8 @@
   .pill { display: inline-block; padding: 5px 10px; border-radius: 999px; font-size: 13px; }
   .pill.good { background: rgba(50,213,131,0.18); color: var(--good); }
   .pill.warn { background: rgba(247,144,9,0.2); color: var(--warn); }
+  .pill.bad { background: rgba(249,112,102,0.22); color: var(--danger); }
+  .pill.neutral { background: rgba(159,176,210,0.2); color: var(--muted); }
   .check-item { display: flex; justify-content: space-between; align-items: center; background: var(--panel); padding: 12px; border-radius: 10px; margin-bottom: 10px; }
   .check-item label { font-size: 18px; }
   .progress { height: 12px; background: #223357; border-radius: 999px; overflow: hidden; }
@@ -71,6 +73,25 @@
 
   textarea { background: #111a2e; color: var(--text); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 8px 10px; width: 100%; }
   .cell-input { width: 100%; min-width: 80px; text-align: right; }
+  .title-input { width: 100%; font-size: 24px; font-weight: 600; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--text); border-radius: 10px; padding: 6px 10px; }
+  .sales-card-head { align-items: center; }
+  .year-header-input { width: 95px; }
+  .sales-controls { margin: 8px 0 10px; }
+  .editable-table-frame { border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; }
+  .trend-cell { min-width: 180px; }
+  .trend-graph { width: 100%; max-width: 120px; height: 30px; display: block; margin-top: 4px; }
+  .trend-baseline { stroke: rgba(255,255,255,0.2); stroke-width: 1; }
+  .trend-path { fill: none; stroke-width: 2; }
+  .trend-point { stroke-width: 1.6; fill: var(--panel-2); }
+  .trend-positive { color: var(--good); }
+  .trend-negative { color: var(--danger); }
+  .trend-neutral { color: var(--muted); }
+  .trend-positive .trend-path, .trend-positive.trend-path { stroke: var(--good); }
+  .trend-negative .trend-path, .trend-negative.trend-path { stroke: var(--danger); }
+  .trend-neutral .trend-path, .trend-neutral.trend-path { stroke: var(--muted); }
+  .trend-positive .trend-point, .trend-positive.trend-point { stroke: var(--good); }
+  .trend-negative .trend-point, .trend-negative.trend-point { stroke: var(--danger); }
+  .trend-neutral .trend-point, .trend-neutral.trend-point { stroke: var(--muted); }
   .stack-sm { display: grid; gap: 8px; }
   .upload-field { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
   .upload-field input { width: 100%; }
