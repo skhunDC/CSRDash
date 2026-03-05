@@ -77,6 +77,87 @@ function getDashboardData() {
   return payload;
 }
 
+function saveSalesEntry(payload) {
+  authorizeOrThrow_();
+  if (!payload || !payload.weekStart || !payload.store || payload.year === undefined) {
+    throw new Error('Invalid payload for sales entry.');
+  }
+
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.SALES_WEEKLY);
+  upsertSheetRow_(sheet, {
+    WeekStart: payload.weekStart,
+    Store: payload.store,
+    Year: Number(payload.year),
+    Sales: Number(payload.sales || 0)
+  }, ['WeekStart', 'Store', 'Year']);
+
+  clearDashboardCache_();
+  return { success: true };
+}
+
+function saveCsrRecognition(payload) {
+  authorizeOrThrow_();
+  if (!payload || !payload.weekStart) {
+    throw new Error('Invalid payload for CSR recognition.');
+  }
+
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_RECOGNITION);
+  const imageData = String(payload.imageData || '').trim();
+  const imageUrl = String(payload.imageUrl || '').trim();
+
+  upsertSheetRow_(sheet, {
+    WeekStart: payload.weekStart,
+    CSRName: payload.csrName || 'TBD',
+    Store: payload.store || '-',
+    Quote: payload.quote || 'Recognizing excellence in service every week.',
+    ImageUrl: imageData || imageUrl
+  }, ['WeekStart']);
+
+  clearDashboardCache_();
+  return { success: true };
+}
+
+function savePerformanceEntry(payload) {
+  authorizeOrThrow_();
+  if (!payload || !payload.date || !payload.store || !payload.csrName) {
+    throw new Error('Invalid payload for performance entry.');
+  }
+
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_PERFORMANCE);
+  upsertSheetRow_(sheet, {
+    Date: payload.date,
+    Store: payload.store,
+    CSRName: payload.csrName,
+    Sales: Number(payload.sales || 0),
+    Hours: Number(payload.hours || 0)
+  }, ['Date', 'Store', 'CSRName']);
+
+  clearDashboardCache_();
+  return { success: true };
+}
+
+function saveScheduleEntry(payload) {
+  authorizeOrThrow_();
+  if (!payload || !payload.date || !payload.store || !payload.csrName) {
+    throw new Error('Invalid payload for schedule entry.');
+  }
+
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_SCHEDULE);
+  upsertSheetRow_(sheet, {
+    Date: payload.date,
+    Store: payload.store,
+    CSRName: payload.csrName,
+    ShiftStatus: payload.shiftStatus || 'OFF'
+  }, ['Date', 'Store', 'CSRName']);
+
+  clearDashboardCache_();
+  return { success: true };
+}
+
 function getCompetitionsData() {
   authorizeOrThrow_();
   const db = openDatabase_();
@@ -244,7 +325,7 @@ function ensureDatabase() {
   ensureSheet_(db, CONFIG.SHEETS.SALES_WEEKLY, ['WeekStart', 'Store', 'Year', 'Sales']);
   ensureSheet_(db, CONFIG.SHEETS.CSR_PERFORMANCE, ['Date', 'Store', 'CSRName', 'Sales', 'Hours']);
   ensureSheet_(db, CONFIG.SHEETS.CSR_SCHEDULE, ['Date', 'Store', 'CSRName', 'ShiftStatus']);
-  ensureSheet_(db, CONFIG.SHEETS.CSR_RECOGNITION, ['WeekStart', 'CSRName', 'Store', 'Quote']);
+  ensureSheet_(db, CONFIG.SHEETS.CSR_RECOGNITION, ['WeekStart', 'CSRName', 'Store', 'Quote', 'ImageUrl']);
   ensureSheet_(db, CONFIG.SHEETS.CSR_COMPETITIONS, ['WeekStart', 'Store', 'Metric', 'CSRName', 'Value', 'UpdatedAt']);
   ensureSheet_(db, CONFIG.SHEETS.CLEANING_CHECKLIST, ['Date', 'Store', 'Task', 'Completed', 'CompletedBy', 'CompletedAt']);
   ensureSheet_(db, CONFIG.SHEETS.AUTH_LOG, ['Timestamp', 'Email', 'Authorized']);
@@ -286,8 +367,22 @@ function ensureSheet_(db, name, headers) {
   }
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    ensureHeaders_(sheet, headers);
   }
   return sheet;
+}
+
+function ensureHeaders_(sheet, expectedHeaders) {
+  const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (header) {
+    return String(header || '').trim();
+  });
+  expectedHeaders.forEach(function (header) {
+    if (currentHeaders.indexOf(header) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header);
+      currentHeaders.push(header);
+    }
+  });
 }
 
 function seedIfEmpty_(db) {
@@ -344,11 +439,12 @@ function seedSchedule_(sheet) {
 function seedRecognition_(sheet) {
   if (sheet.getLastRow() > 1) return;
   const weekStart = getWeekStartISO_(new Date());
-  sheet.getRange(2, 1, 1, 4).setValues([[
+  sheet.getRange(2, 1, 1, 5).setValues([[
     weekStart,
     'Chris',
     'Pleasanton',
-    'Every customer leaves smiling because we listen first.'
+    'Every customer leaves smiling because we listen first.',
+    ''
   ]]);
 }
 
@@ -502,7 +598,8 @@ function buildCsrOfWeek_(db) {
     weekStart: weekStart,
     csrName: 'TBD',
     store: '-',
-    quote: 'Recognizing excellence in service every week.'
+    quote: 'Recognizing excellence in service every week.',
+    imageUrl: ''
   };
 }
 
@@ -550,6 +647,47 @@ function buildChecklistSnapshot_(db) {
     completed: completed,
     progress: total ? completed / total : 0
   };
+}
+
+
+function upsertSheetRow_(sheet, record, keys) {
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const keyIndexes = keys.map(function (key) {
+    return headers.indexOf(key);
+  });
+
+  if (keyIndexes.some(function (idx) { return idx === -1; })) {
+    throw new Error('Sheet headers are missing required columns: ' + keys.join(', '));
+  }
+
+  let rowIndex = -1;
+  for (var r = 1; r < values.length; r++) {
+    const match = keys.every(function (key, idx) {
+      return values[r][keyIndexes[idx]] === record[key];
+    });
+    if (match) {
+      rowIndex = r + 1;
+      break;
+    }
+  }
+
+  const rowValues = headers.map(function (header, idx) {
+    const hasValue = Object.prototype.hasOwnProperty.call(record, header);
+    if (!hasValue) {
+      if (rowIndex > -1) {
+        return values[rowIndex - 1][idx];
+      }
+      return '';
+    }
+    return record[header];
+  });
+
+  if (rowIndex > -1) {
+    sheet.getRange(rowIndex, 1, 1, rowValues.length).setValues([rowValues]);
+  } else {
+    sheet.appendRow(rowValues);
+  }
 }
 
 function authorizeOrThrow_() {

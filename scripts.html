@@ -22,6 +22,10 @@
     getDashboardData() { return this.call('getDashboardData'); },
     getCompetitionsData() { return this.call('getCompetitionsData'); },
     saveCompetitionEntry(payload) { return this.call('saveCompetitionEntry', [payload]); },
+    saveSalesEntry(payload) { return this.call('saveSalesEntry', [payload]); },
+    saveCsrRecognition(payload) { return this.call('saveCsrRecognition', [payload]); },
+    savePerformanceEntry(payload) { return this.call('savePerformanceEntry', [payload]); },
+    saveScheduleEntry(payload) { return this.call('saveScheduleEntry', [payload]); },
     getChecklist(date, store) { return this.call('getChecklist', [date, store]); },
     setChecklistItem(payload) { return this.call('setChecklistItem', [payload]); }
   };
@@ -59,11 +63,18 @@
   function renderDashboard(data) {
     const stores = ['All'].concat(state.config.defaultStores || []);
     const filteredOff = data.scheduleWeek.offList.filter((row) => state.storeFilter === 'All' || row.store === state.storeFilter);
+    const imageMarkup = data.csrOfWeek.imageUrl ? `<img src="${data.csrOfWeek.imageUrl}" alt="CSR of the week" class="csr-week-image" />` : '';
 
     const salesRows = data.salesComparison.map((row) => {
       const growth = row.deltaPct >= 0;
       const pctWidth = Math.min(100, Math.abs(row.deltaPct) * 100);
-      return `<tr><td>${row.store}</td><td class="number">${fmtCurrency(row.sales2025)}</td><td class="number">${fmtCurrency(row.sales2026)}</td><td class="number">${fmtCurrency(row.delta)} (${fmtPercent(row.deltaPct)})</td><td><span class="pill ${growth ? 'good' : 'warn'}">${growth ? 'Up' : 'Down'}</span><div class="bar-wrap"><div class="bar" style="width:${pctWidth}%;opacity:${growth ? '1' : '.45'}"></div></div></td></tr>`;
+      return `<tr>
+        <td>${row.store}</td>
+        <td class="number"><input class="cell-input number sales-input" data-store="${row.store}" data-year="2025" type="number" value="${Number(row.sales2025 || 0)}" /></td>
+        <td class="number"><input class="cell-input number sales-input" data-store="${row.store}" data-year="2026" type="number" value="${Number(row.sales2026 || 0)}" /></td>
+        <td class="number">${fmtCurrency(row.delta)} (${fmtPercent(row.deltaPct)})</td>
+        <td><span class="pill ${growth ? 'good' : 'warn'}">${growth ? 'Up' : 'Down'}</span><div class="bar-wrap"><div class="bar" style="width:${pctWidth}%;opacity:${growth ? '1' : '.45'}"></div></div></td>
+      </tr>`;
     }).join('');
 
     const perfRows = data.csrPerformanceYesterday.entries.map((row) => {
@@ -78,25 +89,48 @@
       <section class="grid">
         <article class="card span-8">
           <div class="card-head"><h2>Sales Week 2026 vs 2025</h2><span class="caption">Week of ${data.scheduleWeek.weekStart}</span></div>
+          <p class="caption">Spreadsheet-style: edit cells and tab to auto-save.</p>
           <table><thead><tr><th>Store</th><th class="number">2025</th><th class="number">2026</th><th class="number">Delta</th><th>Trend</th></tr></thead><tbody>${salesRows}</tbody></table>
         </article>
 
         <article class="card span-4">
           <h2>CSR of the Week</h2>
-          <p><strong>${data.csrOfWeek.csrName}</strong> — ${data.csrOfWeek.store}</p>
-          <p>“${data.csrOfWeek.quote}”</p>
+          ${imageMarkup}
+          <div class="stack-sm">
+            <input id="csr-name" placeholder="CSR name" value="${data.csrOfWeek.csrName || ''}" />
+            <select id="csr-store">${(state.config.defaultStores || []).map((s) => `<option ${s === data.csrOfWeek.store ? 'selected' : ''}>${s}</option>`).join('')}</select>
+            <textarea id="csr-quote" rows="3" placeholder="Recognition quote">${data.csrOfWeek.quote || ''}</textarea>
+            <label class="upload-field">CSR image (recommended 320×220)
+              <input id="csr-image" type="file" accept="image/*" />
+            </label>
+            <button id="csr-save" class="tab active">Save CSR of Week</button>
+          </div>
         </article>
 
         <article class="card span-6">
           <h2>CSR $/Hour (Yesterday)</h2>
           <p>Goal: ${fmtCurrency(data.goalPerHour)}</p>
           <table><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th></tr></thead><tbody>${perfRows}</tbody></table>
+          <div class="row">
+            <input id="perf-csr" placeholder="CSR name" />
+            <select id="perf-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
+            <input id="perf-sales" type="number" min="0" step="1" placeholder="Sales" />
+            <input id="perf-hours" type="number" min="0" step="0.25" placeholder="Hours" />
+            <button id="perf-save" class="tab">Add / Update</button>
+          </div>
         </article>
 
         <article class="card span-6">
           <div class="row"><h2>Weekly Schedule — Who's OFF</h2><select id="dash-store-filter">${stores.map((s) => `<option ${s === state.storeFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
           <p>${data.scheduleWeek.weekStart} → ${data.scheduleWeek.weekEnd}</p>
           <ul>${offRows}</ul>
+          <div class="row">
+            <input id="sched-date" type="date" value="${data.scheduleWeek.weekStart}" />
+            <select id="sched-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
+            <input id="sched-csr" placeholder="CSR name" />
+            <select id="sched-status"><option>OFF</option><option>9a-5p</option><option>10a-6p</option></select>
+            <button id="sched-save" class="tab">Save Schedule</button>
+          </div>
         </article>
 
         <article class="card span-6"><h2>Competitions Highlights</h2>${compCards}</article>
@@ -150,11 +184,85 @@
 
   function bindDashboardActions() {
     const select = document.getElementById('dash-store-filter');
-    if (!select) return;
-    select.addEventListener('change', () => {
-      state.storeFilter = select.value;
-      renderCurrentTab();
+    if (select) {
+      select.addEventListener('change', () => {
+        state.storeFilter = select.value;
+        renderCurrentTab();
+      });
+    }
+
+    document.querySelectorAll('.sales-input').forEach((input) => {
+      input.addEventListener('change', async () => {
+        await safeRun(async () => {
+          await api.saveSalesEntry({
+            weekStart: state.dashboardData.scheduleWeek.weekStart,
+            store: input.dataset.store,
+            year: Number(input.dataset.year),
+            sales: Number(input.value || 0)
+          });
+          await loadDashboard();
+          renderCurrentTab();
+        });
+      });
     });
+
+    const csrSave = document.getElementById('csr-save');
+    if (csrSave) {
+      csrSave.addEventListener('click', async () => {
+        await safeRun(async () => {
+          const fileInput = document.getElementById('csr-image');
+          const file = fileInput.files && fileInput.files[0];
+          const imageData = file ? await readFileAsDataUrl(file) : '';
+
+          await api.saveCsrRecognition({
+            weekStart: state.dashboardData.scheduleWeek.weekStart,
+            csrName: document.getElementById('csr-name').value.trim(),
+            store: document.getElementById('csr-store').value,
+            quote: document.getElementById('csr-quote').value.trim(),
+            imageData
+          });
+          await loadDashboard();
+          renderCurrentTab();
+          toast('CSR of the week saved.');
+        });
+      });
+    }
+
+    const perfSave = document.getElementById('perf-save');
+    if (perfSave) {
+      perfSave.addEventListener('click', async () => {
+        await safeRun(async () => {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const dateIso = yesterday.toISOString().slice(0, 10);
+          await api.savePerformanceEntry({
+            date: dateIso,
+            csrName: document.getElementById('perf-csr').value.trim(),
+            store: document.getElementById('perf-store').value,
+            sales: Number(document.getElementById('perf-sales').value || 0),
+            hours: Number(document.getElementById('perf-hours').value || 0)
+          });
+          await loadDashboard();
+          renderCurrentTab();
+        });
+      });
+    }
+
+    const schedSave = document.getElementById('sched-save');
+    if (schedSave) {
+      schedSave.addEventListener('click', async () => {
+        await safeRun(async () => {
+          await api.saveScheduleEntry({
+            date: document.getElementById('sched-date').value,
+            store: document.getElementById('sched-store').value,
+            csrName: document.getElementById('sched-csr').value.trim(),
+            shiftStatus: document.getElementById('sched-status').value
+          });
+          await loadDashboard();
+          renderCurrentTab();
+        });
+      });
+    }
   }
 
   function bindCompetitionsActions() {
@@ -194,6 +302,15 @@
           renderCurrentTab();
         });
       });
+    });
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
   }
 
