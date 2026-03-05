@@ -27,7 +27,7 @@
   .brand h1 { margin: 0; font-size: 34px; letter-spacing: 0.3px; }
   .brand p { margin: 6px 0 0; color: var(--muted); }
 
-  .tabs { display: flex; gap: 10px; }
+  .tabs { display: flex; gap: 10px; flex-wrap: wrap; }
   .tab { border: 0; font-size: 18px; padding: 12px 20px; border-radius: 12px; background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
   .tab.active, .tab:hover { background: var(--panel-2); outline: 1px solid rgba(98,181,255,0.55); }
 
@@ -72,6 +72,10 @@
   select, input, button { font: inherit; }
   select, input { background: #111a2e; color: var(--text); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 8px 10px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+
+  .tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+  .leader-row { background: rgba(50,213,131,0.12); }
+  .big-link { font-size: 22px; padding: 14px 20px; margin-bottom: 12px; }
 
 
   textarea { background: #111a2e; color: var(--text); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 8px 10px; width: 100%; }

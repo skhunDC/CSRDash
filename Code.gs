@@ -13,9 +13,13 @@ const CONFIG = {
     CSR_SCHEDULE: 'CSR_Schedule',
     CSR_RECOGNITION: 'CSR_Recognition',
     CSR_COMPETITIONS: 'CSR_Competitions',
+    COMPETITION_CATEGORIES: 'Competition_Categories',
+    COMPETITION_ENTRIES: 'Competition_Entries',
+    APP_LINKS: 'App_Links',
     CLEANING_CHECKLIST: 'Cleaning_Checklist',
     AUTH_LOG: 'Auth_Log'
-  }
+  },
+  DEFAULT_PATIO_SIGNUP_LINK: 'https://docs.google.com/spreadsheets/d/1_wQmmrvmFD41CunrE6NUw1no1m4-MPghH4kDmBqZxps/edit?usp=sharing'
 };
 
 function doGet(e) {
@@ -48,7 +52,8 @@ function getClientConfig() {
     appName: CONFIG.APP_NAME,
     refreshIntervalMs: CONFIG.REFRESH_INTERVAL_MS,
     performanceGoal: CONFIG.PERFORMANCE_GOAL,
-    defaultStores: CONFIG.DEFAULT_STORES
+    defaultStores: CONFIG.DEFAULT_STORES,
+    isAdmin: true
   };
 }
 
@@ -71,6 +76,8 @@ function getDashboardData() {
     scheduleWeek: buildScheduleWeek_(db),
     csrOfWeek: buildCsrOfWeek_(db),
     competitionsSnapshot: buildCompetitionsSnapshot_(db),
+    competitionsSummary: buildCompetitionsSnapshot_(db),
+    patioCushionSignupLink: getPatioCushionSignupLink_(),
     checklistSnapshot: buildChecklistSnapshot_(db),
     stores: CONFIG.DEFAULT_STORES,
     goalPerHour: CONFIG.PERFORMANCE_GOAL
@@ -169,41 +176,32 @@ function saveScheduleEntry(payload) {
 
 function getCompetitionsData() {
   authorizeOrThrow_();
-  const db = openDatabase_();
-  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS)).filter(function (row) {
-    return isValidStore_(row.store);
-  });
-  const metricsMap = {};
-  rows.forEach(function (row) {
-    const metric = row.metric;
-    if (!metricsMap[metric]) {
-      metricsMap[metric] = [];
-    }
-    metricsMap[metric].push({
-      weekStart: row.weekStart,
-      store: row.store,
-      csrName: row.csrName,
-      value: Number(row.value || 0),
-      updatedAt: row.updatedAt
-    });
-  });
-
-  const metrics = Object.keys(metricsMap).sort();
-  const leaders = metrics.map(function (metric) {
-    const sorted = metricsMap[metric].slice().sort(function (a, b) {
-      return b.value - a.value;
-    });
+  const categoriesPayload = getCompetitionCategories();
+  const leaders = categoriesPayload.enabled.map(function (category) {
+    const categoryData = getCompetitionCategoryData(category.categoryKey);
     return {
-      metric: metric,
-      leader: sorted[0] || null,
-      entries: sorted
+      metric: category.categoryName,
+      categoryKey: category.categoryKey,
+      leader: categoryData.leader,
+      entries: categoryData.entries
     };
   });
 
   return {
-    metrics: metrics,
+    metrics: leaders.map(function (item) { return item.metric; }),
     leaders: leaders,
-    rows: rows
+    rows: leaders.reduce(function (acc, item) {
+      return acc.concat(item.entries.map(function (entry) {
+        return {
+          metric: item.metric,
+          weekStart: entry.weekStart,
+          store: entry.store,
+          csrName: entry.csr,
+          value: entry.value,
+          updatedAt: entry.updatedAt
+        };
+      }));
+    }, [])
   };
 }
 
@@ -212,46 +210,172 @@ function saveCompetitionEntry(payload) {
   if (!payload || !payload.metric || !payload.csrName) {
     throw new Error('Invalid payload. Expected metric and csrName.');
   }
-  if (payload.store) {
-    assertValidStore_(payload.store);
-  }
+  const category = findCategoryByName_(payload.metric);
+  const categoryKey = category ? category.categoryKey : toSlugKey_(payload.metric);
+  return saveCompetitionEntries({
+    entries: [{
+      weekStart: payload.weekStart || getWeekStartISO_(new Date()),
+      store: payload.store || '',
+      csr: payload.csrName,
+      categoryKey: categoryKey,
+      value: Number(payload.value || 0),
+      notes: payload.notes || ''
+    }]
+  });
+}
 
+function getCompetitionCategories() {
+  authorizeOrThrow_();
   const db = openDatabase_();
-  const sheet = db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS);
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-  const headers = values[0];
+  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES));
+  const all = rows.map(function (row) {
+    return normalizeCategory_(row);
+  }).sort(function (a, b) {
+    return a.sortOrder - b.sortOrder;
+  });
+  return {
+    all: all,
+    enabled: all.filter(function (item) { return item.enabled; })
+  };
+}
+
+function saveCompetitionCategories(payload) {
+  authorizeOrThrow_();
+  const categories = payload && payload.categories;
+  if (!Array.isArray(categories) || !categories.length) {
+    throw new Error('Expected payload.categories with at least one category.');
+  }
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES);
   const now = new Date().toISOString();
-  let foundRow = -1;
 
-  for (var i = 1; i < values.length; i++) {
-    if (
-      values[i][0] === payload.weekStart &&
-      values[i][1] === payload.store &&
-      values[i][2] === payload.metric &&
-      values[i][3] === payload.csrName
-    ) {
-      foundRow = i + 1;
-      break;
-    }
-  }
-
-  if (foundRow > -1) {
-    sheet.getRange(foundRow, headers.indexOf('Value') + 1).setValue(Number(payload.value || 0));
-    sheet.getRange(foundRow, headers.indexOf('UpdatedAt') + 1).setValue(now);
-  } else {
-    sheet.appendRow([
-      payload.weekStart || getWeekStartISO_(new Date()),
-      payload.store || CONFIG.DEFAULT_STORES[0],
-      payload.metric,
-      payload.csrName,
-      Number(payload.value || 0),
-      now
-    ]);
-  }
+  categories.forEach(function (category, idx) {
+    const key = toSlugKey_(category.categoryKey || category.categoryName || ('category_' + idx));
+    upsertSheetRow_(sheet, {
+      CategoryKey: key,
+      CategoryName: category.categoryName || key,
+      Enabled: normalizeBoolean_(category.enabled),
+      SortOrder: Number(category.sortOrder || idx + 1),
+      Goal: category.goal === undefined ? '' : category.goal,
+      Notes: category.notes || '',
+      UpdatedAt: now
+    }, ['CategoryKey']);
+  });
 
   clearDashboardCache_();
-  return { success: true };
+  return getCompetitionCategories();
+}
+
+function getCompetitionCategoryData(categoryKey, dateRange, store) {
+  authorizeOrThrow_();
+  if (!categoryKey) {
+    throw new Error('categoryKey is required.');
+  }
+  const targetWeek = dateRange && dateRange.weekStart ? dateRange.weekStart : getWeekStartISO_(new Date());
+  const db = openDatabase_();
+  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_ENTRIES)).filter(function (row) {
+    const sameCategory = row.categoryKey === categoryKey;
+    const sameWeek = row.weekStart === targetWeek;
+    const sameStore = !store || store === 'All' || row.store === store;
+    return sameCategory && sameWeek && sameStore;
+  });
+
+  const entries = rows.map(function (row) {
+    return {
+      weekStart: row.weekStart,
+      store: row.store,
+      csr: row.csr,
+      categoryKey: row.categoryKey,
+      value: Number(row.value || 0),
+      notes: row.notes || '',
+      updatedAt: row.updatedAt || ''
+    };
+  }).sort(function (a, b) {
+    return b.value - a.value;
+  });
+
+  return {
+    weekStart: targetWeek,
+    categoryKey: categoryKey,
+    entries: entries,
+    leader: entries[0] || null,
+    lastUpdated: entries.reduce(function (latest, entry) {
+      return !latest || String(entry.updatedAt) > String(latest) ? entry.updatedAt : latest;
+    }, '')
+  };
+}
+
+function saveCompetitionEntries(payload) {
+  authorizeOrThrow_();
+  const entries = payload && payload.entries;
+  if (!Array.isArray(entries) || !entries.length) {
+    throw new Error('Expected payload.entries with at least one entry.');
+  }
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.COMPETITION_ENTRIES);
+  const now = new Date().toISOString();
+
+  entries.forEach(function (entry) {
+    if (!entry.categoryKey || !entry.csr) {
+      throw new Error('Each entry requires categoryKey and csr.');
+    }
+    const cleanStore = String(entry.store || '').trim();
+    if (cleanStore && !isValidStore_(cleanStore)) {
+      throw new Error('Invalid store: ' + cleanStore);
+    }
+    upsertSheetRow_(sheet, {
+      WeekStart: entry.weekStart || getWeekStartISO_(new Date()),
+      Store: cleanStore,
+      CSR: entry.csr,
+      CategoryKey: toSlugKey_(entry.categoryKey),
+      Value: Number(entry.value || 0),
+      Notes: entry.notes || '',
+      UpdatedAt: now
+    }, ['WeekStart', 'Store', 'CSR', 'CategoryKey']);
+  });
+
+  clearDashboardCache_();
+  return { success: true, updated: entries.length };
+}
+
+function getAppLinks() {
+  authorizeOrThrow_();
+  const db = openDatabase_();
+  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.APP_LINKS));
+  return rows.reduce(function (acc, row) {
+    if (!row.key) return acc;
+    acc[row.key] = {
+      key: row.key,
+      label: row.label || row.key,
+      url: row.url || '',
+      updatedAt: row.updatedAt || ''
+    };
+    return acc;
+  }, {});
+}
+
+function saveAppLinks(payload) {
+  authorizeOrThrow_();
+  const links = payload && payload.links;
+  if (!Array.isArray(links) || !links.length) {
+    throw new Error('Expected payload.links with at least one item.');
+  }
+  const db = openDatabase_();
+  const sheet = db.getSheetByName(CONFIG.SHEETS.APP_LINKS);
+  const now = new Date().toISOString();
+
+  links.forEach(function (link) {
+    if (!link.key) throw new Error('Each link requires key.');
+    upsertSheetRow_(sheet, {
+      Key: link.key,
+      Label: link.label || link.key,
+      Url: link.url || '',
+      UpdatedAt: now
+    }, ['Key']);
+  });
+
+  clearDashboardCache_();
+  return getAppLinks();
 }
 
 function getChecklist(dateIso, store) {
@@ -341,6 +465,9 @@ function ensureDatabase() {
   ensureSheet_(db, CONFIG.SHEETS.CSR_SCHEDULE, ['Date', 'Store', 'CSRName', 'ShiftStatus']);
   ensureSheet_(db, CONFIG.SHEETS.CSR_RECOGNITION, ['WeekStart', 'CSRName', 'Store', 'Quote', 'ImageUrl']);
   ensureSheet_(db, CONFIG.SHEETS.CSR_COMPETITIONS, ['WeekStart', 'Store', 'Metric', 'CSRName', 'Value', 'UpdatedAt']);
+  ensureSheet_(db, CONFIG.SHEETS.COMPETITION_CATEGORIES, ['CategoryKey', 'CategoryName', 'Enabled', 'SortOrder', 'Goal', 'Notes', 'UpdatedAt']);
+  ensureSheet_(db, CONFIG.SHEETS.COMPETITION_ENTRIES, ['WeekStart', 'Store', 'CSR', 'CategoryKey', 'Value', 'Notes', 'UpdatedAt']);
+  ensureSheet_(db, CONFIG.SHEETS.APP_LINKS, ['Key', 'Label', 'Url', 'UpdatedAt']);
   ensureSheet_(db, CONFIG.SHEETS.CLEANING_CHECKLIST, ['Date', 'Store', 'Task', 'Completed', 'CompletedBy', 'CompletedAt']);
   ensureSheet_(db, CONFIG.SHEETS.AUTH_LOG, ['Timestamp', 'Email', 'Authorized']);
 
@@ -405,6 +532,9 @@ function seedIfEmpty_(db) {
   seedSchedule_(db.getSheetByName(CONFIG.SHEETS.CSR_SCHEDULE));
   seedRecognition_(db.getSheetByName(CONFIG.SHEETS.CSR_RECOGNITION));
   seedCompetitions_(db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS));
+  seedCompetitionCategories_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES));
+  seedCompetitionEntries_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_ENTRIES), db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES));
+  seedAppLinks_(db.getSheetByName(CONFIG.SHEETS.APP_LINKS));
   seedChecklist_(db.getSheetByName(CONFIG.SHEETS.CLEANING_CHECKLIST));
 }
 
@@ -481,6 +611,50 @@ function seedCompetitions_(sheet) {
     });
   });
   sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function seedCompetitionCategories_(sheet) {
+  if (sheet.getLastRow() > 1) return;
+  const now = new Date().toISOString();
+  sheet.getRange(2, 1, 3, 7).setValues([
+    ['conversions', 'CSR Conversions', true, 1, '', '', now],
+    ['patio_signups', 'Patio Signups', true, 2, '', '', now],
+    ['alterations', 'Alterations', true, 3, '', '', now]
+  ]);
+}
+
+function seedCompetitionEntries_(entriesSheet, categoriesSheet) {
+  if (entriesSheet.getLastRow() > 1) return;
+  const weekStart = getWeekStartISO_(new Date());
+  const categories = getDataRows_(categoriesSheet);
+  const csrs = ['Ana', 'Chris', 'Taylor'];
+  const rows = [];
+  categories.forEach(function (category, cIdx) {
+    csrs.forEach(function (csr, idx) {
+      rows.push([
+        weekStart,
+        CONFIG.DEFAULT_STORES[idx % CONFIG.DEFAULT_STORES.length],
+        csr,
+        category.categoryKey,
+        (cIdx + 1) * 4 + idx,
+        '',
+        new Date().toISOString()
+      ]);
+    });
+  });
+  if (rows.length) {
+    entriesSheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  }
+}
+
+function seedAppLinks_(sheet) {
+  if (sheet.getLastRow() > 1) return;
+  sheet.getRange(2, 1, 1, 4).setValues([[
+    'PATIO_CUSHION_SIGNUP',
+    'Patio Cushion Signup Sheet',
+    CONFIG.DEFAULT_PATIO_SIGNUP_LINK,
+    new Date().toISOString()
+  ]]);
 }
 
 function seedChecklist_(sheet) {
@@ -650,30 +824,35 @@ function buildCsrOfWeek_(db) {
 }
 
 function buildCompetitionsSnapshot_(db) {
-  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.CSR_COMPETITIONS));
+  const categories = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES))
+    .map(function (row) { return normalizeCategory_(row); })
+    .filter(function (row) { return row.enabled; })
+    .sort(function (a, b) { return a.sortOrder - b.sortOrder; });
   const weekStart = getWeekStartISO_(new Date());
-  const filtered = rows.filter(function (row) {
-    return row.weekStart === weekStart && isValidStore_(row.store);
+  const entries = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_ENTRIES)).filter(function (row) {
+    return row.weekStart === weekStart;
   });
 
-  const byMetric = {};
-  filtered.forEach(function (row) {
-    if (!byMetric[row.metric]) byMetric[row.metric] = [];
-    byMetric[row.metric].push(row);
-  });
+  return categories.map(function (category) {
+    const categoryEntries = entries
+      .filter(function (row) { return row.categoryKey === category.categoryKey; })
+      .map(function (row) {
+        return {
+          csrName: row.csr,
+          store: row.store,
+          value: Number(row.value || 0),
+          notes: row.notes || ''
+        };
+      })
+      .sort(function (a, b) { return b.value - a.value; });
 
-  return Object.keys(byMetric).map(function (metric) {
-    const entries = byMetric[metric].map(function (row) {
-      return {
-        csrName: row.csrName,
-        store: row.store,
-        value: Number(row.value || 0)
-      };
-    }).sort(function (a, b) { return b.value - a.value; });
     return {
-      metric: metric,
-      leader: entries[0] || null,
-      entries: entries
+      categoryKey: category.categoryKey,
+      metric: category.categoryName,
+      leader: categoryEntries[0] || null,
+      entries: categoryEntries,
+      goal: category.goal,
+      notes: category.notes
     };
   });
 }
@@ -794,6 +973,46 @@ function normalizeBoolean_(value) {
   if (value === true || value === false) return value;
   const normalized = String(value).toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function toSlugKey_(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'category';
+}
+
+function normalizeCategory_(row) {
+  return {
+    categoryKey: toSlugKey_(row.categoryKey || row.categoryname || row.categoryName),
+    categoryName: row.categoryName || row.categoryKey || 'Unnamed Category',
+    enabled: normalizeBoolean_(row.enabled),
+    sortOrder: Number(row.sortOrder || 999),
+    goal: row.goal || '',
+    notes: row.notes || '',
+    updatedAt: row.updatedAt || ''
+  };
+}
+
+function findCategoryByName_(categoryName) {
+  const db = openDatabase_();
+  const rows = getDataRows_(db.getSheetByName(CONFIG.SHEETS.COMPETITION_CATEGORIES)).map(function (row) {
+    return normalizeCategory_(row);
+  });
+  const target = String(categoryName || '').trim().toLowerCase();
+  return rows.find(function (row) {
+    return String(row.categoryName || '').toLowerCase() === target || String(row.categoryKey || '').toLowerCase() === target;
+  }) || null;
+}
+
+function getPatioCushionSignupLink_() {
+  const links = getAppLinks();
+  return links.PATIO_CUSHION_SIGNUP || {
+    key: 'PATIO_CUSHION_SIGNUP',
+    label: 'Patio Cushion Signup Sheet',
+    url: CONFIG.DEFAULT_PATIO_SIGNUP_LINK,
+    updatedAt: ''
+  };
 }
 
 function clearDashboardCache_() {
