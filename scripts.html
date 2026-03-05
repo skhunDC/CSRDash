@@ -5,8 +5,12 @@
     storeFilter: 'All',
     dateSelected: new Date().toISOString().slice(0, 10),
     dashboardData: null,
-    competitionsData: null,
     checklistData: null,
+    categories: { all: [], enabled: [] },
+    links: {},
+    categoryData: {},
+    manageMode: {},
+    drafts: { categories: [], links: [], entries: {} },
     config: { refreshIntervalMs: 5 * 60 * 1000, defaultStores: ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'] },
     salesTable: {
       thisYear: '2026',
@@ -32,8 +36,12 @@
     getAuthStatus() { return this.call('getAuthStatus'); },
     getClientConfig() { return this.call('getClientConfig'); },
     getDashboardData() { return this.call('getDashboardData'); },
-    getCompetitionsData() { return this.call('getCompetitionsData'); },
-    saveCompetitionEntry(payload) { return this.call('saveCompetitionEntry', [payload]); },
+    getCompetitionCategories() { return this.call('getCompetitionCategories'); },
+    saveCompetitionCategories(payload) { return this.call('saveCompetitionCategories', [payload]); },
+    getCompetitionCategoryData(categoryKey, dateRange, store) { return this.call('getCompetitionCategoryData', [categoryKey, dateRange, store]); },
+    saveCompetitionEntries(payload) { return this.call('saveCompetitionEntries', [payload]); },
+    getAppLinks() { return this.call('getAppLinks'); },
+    saveAppLinks(payload) { return this.call('saveAppLinks', [payload]); },
     saveSalesEntry(payload) { return this.call('saveSalesEntry', [payload]); },
     saveCsrRecognition(payload) { return this.call('saveCsrRecognition', [payload]); },
     savePerformanceEntry(payload) { return this.call('savePerformanceEntry', [payload]); },
@@ -117,16 +125,34 @@
     });
   }
 
+  function getNavTabs_() {
+    const dynamic = state.categories.enabled.map((cat) => ({ key: `category:${cat.categoryKey}`, label: cat.categoryName }));
+    return [
+      { key: 'dashboard', label: 'Dashboard' },
+      ...dynamic,
+      { key: 'checklist', label: 'Cleaning Checklist' },
+      { key: 'metrics_admin', label: 'Metrics Admin' },
+      { key: 'links_admin', label: 'Links Admin' }
+    ];
+  }
+
+  function renderTopTabs() {
+    const tabs = getNavTabs_();
+    if (!tabs.some((tab) => tab.key === state.activeTab)) {
+      state.activeTab = 'dashboard';
+    }
+    const nav = document.getElementById('top-tabs');
+    nav.innerHTML = tabs.map((tab) => `<button data-tab="${tab.key}" class="tab ${state.activeTab === tab.key ? 'active' : ''}">${tab.label}</button>`).join('');
+  }
+
   function setupTabs() {
-    document.querySelectorAll('.tab').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        if (!tab) return;
-        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.activeTab = tab;
-        renderCurrentTab();
-      });
+    const nav = document.getElementById('top-tabs');
+    nav.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-tab]');
+      if (!btn) return;
+      state.activeTab = btn.dataset.tab;
+      renderTopTabs();
+      renderCurrentTab();
     });
   }
 
@@ -230,7 +256,7 @@
           </div>
         </article>
 
-        <article class="card span-6"><h2>Competitions Highlights</h2>${compCards}</article>
+        <article class="card span-6"><h2>Competitions Highlights</h2><div class="row">${patioLinkButton_()}</div>${compCards}</article>
 
         <article class="card span-6">
           <h2>Cleaning Checklist Progress</h2>
@@ -241,26 +267,31 @@
       </section>`;
   }
 
-  function renderCompetitions(data) {
-    const metrics = [...new Set(data.rows.map((r) => r.metric))];
-    const csrOptions = [...new Set(data.rows.map((r) => r.csrName))].map((c) => `<option>${c}</option>`).join('');
-    const stores = state.config.defaultStores || ['Plant', 'Muirfield', 'Frantz', 'Morse', 'Newark', 'Granville', 'Short North'];
+  function patioLinkButton_() {
+    const link = state.links.PATIO_CUSHION_SIGNUP || state.dashboardData.patioCushionSignupLink || { label: 'Patio Cushion Signup Sheet', url: '#' };
+    return `<a class="tab" href="${link.url}" target="_blank" rel="noopener">↗ ${link.label}</a>`;
+  }
 
-    const blocks = data.leaders.map((metricObj) => {
-      const rows = metricObj.entries.map((entry) => `<tr><td>${entry.csrName}</td><td>${entry.store}</td><td class="number">${entry.value}</td></tr>`).join('');
-      return `<article class="card span-4"><h2>${metricObj.metric}</h2><p>Leader: <strong>${metricObj.leader ? metricObj.leader.csrName : '-'}</strong></p><table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th></tr></thead><tbody>${rows}</tbody></table></article>`;
+  function renderCategoryTab(categoryKey) {
+    const category = state.categories.all.find((item) => item.categoryKey === categoryKey) || { categoryName: categoryKey };
+    const data = state.categoryData[categoryKey] || { entries: [], lastUpdated: '' };
+    const isManage = !!state.manageMode[categoryKey];
+    const rows = (data.entries || []).map((entry, idx) => {
+      const isLeader = data.leader && data.leader.csr === entry.csr && Number(data.leader.value) === Number(entry.value);
+      return `<tr class="${isLeader ? 'leader-row' : ''}"><td>${entry.csr}</td><td>${entry.store || '-'}</td><td class="number">${isManage ? `<input class="cell-input comp-input" data-category="${categoryKey}" data-idx="${idx}" data-field="value" type="number" value="${Number(entry.value || 0)}" />` : Number(entry.value || 0)}</td><td>${isManage ? `<input class="cell-input comp-input" data-category="${categoryKey}" data-idx="${idx}" data-field="notes" value="${entry.notes || ''}" />` : (entry.notes || '')}</td></tr>`;
     }).join('');
 
-    return `
-      <section class="row">
-        <input id="comp-metric" list="metric-list" placeholder="Metric name (editable)" value="${metrics[0] || ''}" />
-        <datalist id="metric-list">${metrics.map((m) => `<option value="${m}">`).join('')}</datalist>
-        <select id="comp-store">${stores.map((s) => `<option>${s}</option>`).join('')}</select>
-        <select id="comp-csr">${csrOptions}</select>
-        <input id="comp-value" type="number" min="0" step="1" placeholder="Value" />
-        <button id="comp-save" class="tab active">Save Entry</button>
-      </section>
-      <section class="grid">${blocks}</section>`;
+    return `<section class="card"><div class="row"><h2>${category.categoryName}</h2><button id="category-manage-toggle" class="tab">${isManage ? 'TV View' : 'Manage'}</button><button id="category-save" class="tab ${isManage ? '' : 'hidden'}">Save</button><span class="caption">Last updated: ${data.lastUpdated || '-'}</span></div><div class="row">${patioLinkButton_()}</div><table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">Value</th><th>Notes</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No entries yet.</td></tr>'}</tbody></table></section>`;
+  }
+
+  function renderMetricsAdmin() {
+    const rows = state.drafts.categories.map((item, idx) => `<tr><td><input class="metric-input" data-idx="${idx}" data-field="categoryKey" value="${item.categoryKey || ''}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="categoryName" value="${item.categoryName || ''}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="enabled" type="checkbox" ${item.enabled ? 'checked' : ''} /></td><td><input class="metric-input" data-idx="${idx}" data-field="sortOrder" type="number" value="${Number(item.sortOrder || 0)}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="goal" value="${item.goal || ''}" /></td><td><input class="metric-input" data-idx="${idx}" data-field="notes" value="${item.notes || ''}" /></td></tr>`).join('');
+    return `<section class="card"><div class="row"><h2>Metrics Admin</h2><button id="metric-add" class="tab">Add Category</button><button id="metric-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>CategoryKey</th><th>CategoryName</th><th>Enabled</th><th>SortOrder</th><th>Goal</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  }
+
+  function renderLinksAdmin() {
+    const rows = state.drafts.links.map((item, idx) => `<tr><td>${item.key}</td><td><input class="link-input" data-idx="${idx}" data-field="label" value="${item.label || ''}" /></td><td><input class="link-input" data-idx="${idx}" data-field="url" value="${item.url || ''}" /></td></tr>`).join('');
+    return `<section class="card"><div class="row"><h2>Links Admin</h2><button id="links-save" class="tab">Save</button></div><table class="data-table"><thead><tr><th>Key</th><th>Label</th><th>URL</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }
 
   function renderChecklist(data) {
@@ -273,10 +304,19 @@
   }
 
   async function loadDashboard() { state.dashboardData = await api.getDashboardData(); }
-  async function loadCompetitions() { state.competitionsData = await api.getCompetitionsData(); }
   async function loadChecklist() {
     const store = state.storeFilter === 'All' ? (state.config.defaultStores[0] || 'Plant') : state.storeFilter;
     state.checklistData = await api.getChecklist(state.dateSelected, store);
+  }
+
+  async function refreshCompetitionModel() {
+    state.categories = await api.getCompetitionCategories();
+    state.drafts.categories = JSON.parse(JSON.stringify(state.categories.all || []));
+    for (const category of state.categories.enabled || []) {
+      state.categoryData[category.categoryKey] = await api.getCompetitionCategoryData(category.categoryKey, { weekStart: state.dashboardData.scheduleWeek.weekStart }, 'All');
+    }
+    state.drafts.entries = {};
+    renderTopTabs();
   }
 
   function bindDashboardActions() {
@@ -510,24 +550,113 @@
     });
   }
 
-  function bindCompetitionsActions() {
-    const btn = document.getElementById('comp-save');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-      await safeRun(async () => {
-        const metric = document.getElementById('comp-metric').value.trim();
-        if (!metric) throw new Error('Metric name is required.');
-        await api.saveCompetitionEntry({
-          weekStart: state.dashboardData.scheduleWeek.weekStart,
-          metric,
-          store: document.getElementById('comp-store').value,
-          csrName: document.getElementById('comp-csr').value,
-          value: Number(document.getElementById('comp-value').value || 0)
-        });
-        await Promise.all([loadCompetitions(), loadDashboard()]);
+  function bindCategoryActions(categoryKey) {
+    const toggle = document.getElementById('category-manage-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        state.manageMode[categoryKey] = !state.manageMode[categoryKey];
         renderCurrentTab();
       });
+    }
+
+    document.querySelectorAll('.comp-input').forEach((input) => {
+      input.addEventListener('input', () => {
+        const rows = state.drafts.entries[categoryKey] || (state.drafts.entries[categoryKey] = JSON.parse(JSON.stringify((state.categoryData[categoryKey] && state.categoryData[categoryKey].entries) || [])));
+        const idx = Number(input.dataset.idx);
+        rows[idx][input.dataset.field] = input.dataset.field === 'value' ? Number(input.value || 0) : input.value;
+      });
     });
+
+    const saveBtn = document.getElementById('category-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        await safeRun(async () => {
+          const rows = state.drafts.entries[categoryKey] || state.categoryData[categoryKey].entries || [];
+          await api.saveCompetitionEntries({
+            entries: rows.map((row) => ({
+              weekStart: state.categoryData[categoryKey].weekStart,
+              store: row.store || '',
+              csr: row.csr,
+              categoryKey: categoryKey,
+              value: Number(row.value || 0),
+              notes: row.notes || ''
+            }))
+          });
+          await Promise.all([
+            loadDashboard(),
+            refreshCompetitionModel()
+          ]);
+          renderCurrentTab();
+          toast('Competition entries saved.');
+        });
+      });
+    }
+  }
+
+  function bindMetricsAdminActions() {
+    const addBtn = document.getElementById('metric-add');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => {
+        state.drafts.categories.push({
+          categoryKey: '',
+          categoryName: 'New Category',
+          enabled: true,
+          sortOrder: state.drafts.categories.length + 1,
+          goal: '',
+          notes: ''
+        });
+        renderCurrentTab();
+      });
+    }
+
+    document.querySelectorAll('.metric-input').forEach((input) => {
+      const setValue = () => {
+        const row = state.drafts.categories[Number(input.dataset.idx)];
+        row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
+      };
+      input.addEventListener('input', setValue);
+      input.addEventListener('change', setValue);
+    });
+
+    const saveBtn = document.getElementById('metric-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        await safeRun(async () => {
+          await api.saveCompetitionCategories({ categories: state.drafts.categories });
+          await Promise.all([loadDashboard(), refreshCompetitionModel()]);
+          renderCurrentTab();
+          toast('Categories saved.');
+        });
+      });
+    }
+  }
+
+  function bindLinksAdminActions() {
+    const isValidUrl = (url) => /^https?:\/\//i.test(String(url || ''));
+
+    document.querySelectorAll('.link-input').forEach((input) => {
+      input.addEventListener('input', () => {
+        state.drafts.links[Number(input.dataset.idx)][input.dataset.field] = input.value;
+      });
+    });
+
+    const saveBtn = document.getElementById('links-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        await safeRun(async () => {
+          state.drafts.links.forEach((row) => {
+            if (!isValidUrl(row.url)) {
+              throw new Error('Invalid URL for ' + row.key);
+            }
+          });
+          state.links = await api.saveAppLinks({ links: state.drafts.links });
+          state.drafts.links = Object.values(state.links);
+          await loadDashboard();
+          renderCurrentTab();
+          toast('Links saved.');
+        });
+      });
+    }
   }
 
   function bindChecklistActions() {
@@ -566,13 +695,31 @@
       bindDashboardActions();
       return;
     }
-    if (state.activeTab === 'competitions') {
-      target.innerHTML = renderCompetitions(state.competitionsData);
-      bindCompetitionsActions();
+    if (state.activeTab === 'checklist') {
+      target.innerHTML = renderChecklist(state.checklistData);
+      bindChecklistActions();
       return;
     }
-    target.innerHTML = renderChecklist(state.checklistData);
-    bindChecklistActions();
+    if (state.activeTab === 'metrics_admin') {
+      target.innerHTML = renderMetricsAdmin();
+      bindMetricsAdminActions();
+      return;
+    }
+    if (state.activeTab === 'links_admin') {
+      target.innerHTML = renderLinksAdmin();
+      bindLinksAdminActions();
+      return;
+    }
+    if (state.activeTab.indexOf('category:') === 0) {
+      const categoryKey = state.activeTab.split(':')[1];
+      target.innerHTML = renderCategoryTab(categoryKey);
+      bindCategoryActions(categoryKey);
+      return;
+    }
+    state.activeTab = 'dashboard';
+    renderTopTabs();
+    target.innerHTML = renderDashboard(state.dashboardData);
+    bindDashboardActions();
   }
 
   async function bootstrap() {
@@ -591,11 +738,18 @@
       setupTabs();
 
       state.config = Object.assign({}, state.config, await api.getClientConfig());
-      await Promise.all([loadDashboard(), loadCompetitions(), loadChecklist()]);
+      state.links = await api.getAppLinks();
+      state.drafts.links = Object.values(state.links);
+      await Promise.all([loadDashboard(), loadChecklist()]);
+      await refreshCompetitionModel();
+      renderTopTabs();
       renderCurrentTab();
 
       setInterval(() => safeRun(async () => {
-        await Promise.all([loadDashboard(), loadCompetitions(), loadChecklist()]);
+        state.links = await api.getAppLinks();
+        state.drafts.links = Object.values(state.links);
+        await Promise.all([loadDashboard(), loadChecklist()]);
+        await refreshCompetitionModel();
         renderCurrentTab();
       }), state.config.refreshIntervalMs || 5 * 60 * 1000);
     } catch (err) {
