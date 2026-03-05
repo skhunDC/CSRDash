@@ -14,7 +14,12 @@
       title: '',
       titleAuto: true,
       initialized: false
-    }
+    },
+    dashboardDrafts: {
+      performance: [],
+      schedule: []
+    },
+    nextDraftId: 1
   };
 
   const api = {
@@ -40,6 +45,11 @@
   const fmtCurrency = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
   const fmtPercent = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
   const defaultSalesTitle = (thisYear, lastYear) => `Sales Week ${thisYear} vs ${lastYear}`;
+  const getYesterdayIso = () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().slice(0, 10);
+  };
 
   function withDeltaSign(amount) {
     const absolute = fmtCurrency(Math.abs(amount));
@@ -146,7 +156,27 @@
       return `<tr><td>${row.csrName} ${isTop ? '🏆' : ''}</td><td>${row.store}</td><td class="number">${fmtCurrency(row.dollarsPerHour)}</td><td class="number">${fmtCurrency(row.sales)}</td><td class="number">${Number(row.hours).toFixed(2)}</td><td class="${trendClass}"><span class="pill ${deltaPerHour >= 0 ? 'good' : 'bad'}">${trendLabel}</span> <span class="caption">${withDeltaSign(deltaPerHour)}</span></td></tr>`;
     }).join('');
 
-    const offRows = filteredOff.map((row) => `<li>${row.date}: <strong>${row.csrName}</strong> (${row.store})</li>`).join('') || '<li>No one marked OFF for selected store this week.</li>';
+    const perfDraftRows = state.dashboardDrafts.performance.map((row) => {
+      const sales = Number(row.sales || 0);
+      const hours = Number(row.hours || 0);
+      const dollarsPerHour = hours > 0 ? sales / hours : 0;
+      return `<tr data-draft-id="${row.id}">
+        <td><input class="perf-draft-field" data-field="csrName" data-draft-id="${row.id}" placeholder="CSR name" value="${row.csrName || ''}" /></td>
+        <td><select class="perf-draft-field" data-field="store" data-draft-id="${row.id}">${(state.config.defaultStores || []).map((store) => `<option ${store === row.store ? 'selected' : ''}>${store}</option>`).join('')}</select></td>
+        <td class="number">${fmtCurrency(dollarsPerHour)}</td>
+        <td class="number"><input class="perf-draft-field number" data-field="sales" data-draft-id="${row.id}" type="number" min="0" step="1" value="${row.sales || ''}" /></td>
+        <td class="number"><input class="perf-draft-field number" data-field="hours" data-draft-id="${row.id}" type="number" min="0" step="0.25" value="${row.hours || ''}" /></td>
+        <td><span class="caption">Draft row</span></td>
+      </tr>`;
+    }).join('');
+
+    const offRows = filteredOff.map((row) => `<tr><td>${row.date}</td><td>${row.csrName}</td><td>${row.store}</td><td>OFF</td></tr>`).join('') || '<tr><td colspan="4" class="caption">No one marked OFF for selected store this week.</td></tr>';
+    const scheduleDraftRows = state.dashboardDrafts.schedule.map((row) => `<tr data-draft-id="${row.id}">
+      <td><input class="sched-draft-field" data-field="date" data-draft-id="${row.id}" type="date" value="${row.date}" /></td>
+      <td><input class="sched-draft-field" data-field="csrName" data-draft-id="${row.id}" placeholder="CSR name" value="${row.csrName || ''}" /></td>
+      <td><select class="sched-draft-field" data-field="store" data-draft-id="${row.id}">${(state.config.defaultStores || []).map((store) => `<option ${store === row.store ? 'selected' : ''}>${store}</option>`).join('')}</select></td>
+      <td><select class="sched-draft-field" data-field="shiftStatus" data-draft-id="${row.id}"><option ${row.shiftStatus === 'OFF' ? 'selected' : ''}>OFF</option><option ${row.shiftStatus === '9a-5p' ? 'selected' : ''}>9a-5p</option><option ${row.shiftStatus === '10a-6p' ? 'selected' : ''}>10a-6p</option></select></td>
+    </tr>`).join('');
     const compCards = data.competitionsSnapshot.map((metric) => `<p><strong>${metric.metric}:</strong> ${metric.leader ? `${metric.leader.csrName} (${metric.leader.value})` : 'No entries'}</p>`).join('');
 
     return `
@@ -175,7 +205,8 @@
         <article class="card span-6">
           <h2>CSR $/Hour (Yesterday)</h2>
           <p>Goal: ${fmtCurrency(data.goalPerHour)}</p>
-          <table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th><th>Trend</th></tr></thead><tbody>${perfRows}</tbody></table>
+          <table class="data-table"><thead><tr><th>CSR</th><th>Store</th><th class="number">$/Hour</th><th class="number">Sales</th><th class="number">Hours</th><th>Trend</th></tr></thead><tbody>${perfRows}${perfDraftRows}</tbody></table>
+          <button id="perf-add-row" class="tab">+ Add Row</button>
           <div class="row">
             <input id="perf-csr" placeholder="CSR name" />
             <select id="perf-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
@@ -188,7 +219,8 @@
         <article class="card span-6">
           <div class="row"><h2>Weekly Schedule — Who's OFF</h2><select id="dash-store-filter">${stores.map((s) => `<option ${s === state.storeFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
           <p>${data.scheduleWeek.weekStart} → ${data.scheduleWeek.weekEnd}</p>
-          <ul>${offRows}</ul>
+          <table class="data-table"><thead><tr><th>Date</th><th>CSR</th><th>Store</th><th>Status</th></tr></thead><tbody>${offRows}${scheduleDraftRows}</tbody></table>
+          <button id="sched-add-row" class="tab">+ Add Row</button>
           <div class="row">
             <input id="sched-date" type="date" value="${data.scheduleWeek.weekStart}" />
             <select id="sched-store">${(state.config.defaultStores || []).map((s) => `<option>${s}</option>`).join('')}</select>
@@ -368,9 +400,7 @@
     if (perfSave) {
       perfSave.addEventListener('click', async () => {
         await safeRun(async () => {
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          const dateIso = yesterday.toISOString().slice(0, 10);
+          const dateIso = getYesterdayIso();
           await api.savePerformanceEntry({
             date: dateIso,
             csrName: document.getElementById('perf-csr').value.trim(),
@@ -383,6 +413,46 @@
         });
       });
     }
+
+    const perfAddRow = document.getElementById('perf-add-row');
+    if (perfAddRow) {
+      perfAddRow.addEventListener('click', () => {
+        state.dashboardDrafts.performance.push({
+          id: state.nextDraftId++,
+          csrName: '',
+          store: (state.config.defaultStores || [])[0] || 'Plant',
+          sales: '',
+          hours: ''
+        });
+        renderCurrentTab();
+      });
+    }
+
+    const savePerformanceDraft = async (draftId) => {
+      const draft = state.dashboardDrafts.performance.find((row) => String(row.id) === String(draftId));
+      if (!draft || !draft.csrName.trim()) return;
+      await api.savePerformanceEntry({
+        date: getYesterdayIso(),
+        csrName: draft.csrName.trim(),
+        store: draft.store,
+        sales: Number(draft.sales || 0),
+        hours: Number(draft.hours || 0)
+      });
+      state.dashboardDrafts.performance = state.dashboardDrafts.performance.filter((row) => row.id !== draft.id);
+      await loadDashboard();
+      renderCurrentTab();
+    };
+
+    document.querySelectorAll('.perf-draft-field').forEach((input) => {
+      input.addEventListener('input', () => {
+        const draft = state.dashboardDrafts.performance.find((row) => String(row.id) === input.dataset.draftId);
+        if (!draft) return;
+        draft[input.dataset.field] = input.value;
+      });
+      input.addEventListener('change', () => {
+        safeRun(async () => { await savePerformanceDraft(input.dataset.draftId); });
+      });
+    });
 
     const schedSave = document.getElementById('sched-save');
     if (schedSave) {
@@ -399,6 +469,45 @@
         });
       });
     }
+
+    const schedAddRow = document.getElementById('sched-add-row');
+    if (schedAddRow) {
+      schedAddRow.addEventListener('click', () => {
+        state.dashboardDrafts.schedule.push({
+          id: state.nextDraftId++,
+          date: state.dashboardData.scheduleWeek.weekStart,
+          csrName: '',
+          store: (state.config.defaultStores || [])[0] || 'Plant',
+          shiftStatus: 'OFF'
+        });
+        renderCurrentTab();
+      });
+    }
+
+    const saveScheduleDraft = async (draftId) => {
+      const draft = state.dashboardDrafts.schedule.find((row) => String(row.id) === String(draftId));
+      if (!draft || !draft.csrName.trim()) return;
+      await api.saveScheduleEntry({
+        date: draft.date,
+        store: draft.store,
+        csrName: draft.csrName.trim(),
+        shiftStatus: draft.shiftStatus
+      });
+      state.dashboardDrafts.schedule = state.dashboardDrafts.schedule.filter((row) => row.id !== draft.id);
+      await loadDashboard();
+      renderCurrentTab();
+    };
+
+    document.querySelectorAll('.sched-draft-field').forEach((input) => {
+      input.addEventListener('input', () => {
+        const draft = state.dashboardDrafts.schedule.find((row) => String(row.id) === input.dataset.draftId);
+        if (!draft) return;
+        draft[input.dataset.field] = input.value;
+      });
+      input.addEventListener('change', () => {
+        safeRun(async () => { await saveScheduleDraft(input.dataset.draftId); });
+      });
+    });
   }
 
   function bindCompetitionsActions() {
