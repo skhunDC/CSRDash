@@ -33,8 +33,9 @@ Sample seed rows are inserted automatically when tabs are empty.
 ## TV Mode
 
 - Default Dashboard tab renders a one-screen card grid for all KPIs.
+- Store filter is available directly inside the weekly schedule card.
 - Dark theme + larger typography supports ceiling-mounted TV readability.
-- Data refreshes every 5 minutes.
+- Data refreshes every 5 minutes using server-driven config (`getClientConfig`).
 
 ## Change Allowed Users
 
@@ -42,7 +43,9 @@ In `Code.gs`, update `CONFIG.ALLOWED_EMAILS`.
 
 ## Change Competition Metrics
 
-Metrics are data-driven through `CSR_Competitions.Metric` values. Add rows with new metric names to start tracking them.
+Metrics are data-driven through `CSR_Competitions.Metric` values.
+- Add new metric names directly from the UI metric input (or by adding rows in Sheets).
+- Existing metrics appear as suggestions via datalist.
 
 ## Print Checklist / Standings
 

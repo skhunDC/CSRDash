@@ -34,11 +34,21 @@ function include(fileName) {
 
 function getAuthStatus() {
   const email = getCurrentUserEmail_();
-  const authorized = CONFIG.ALLOWED_EMAILS.indexOf(email) !== -1;
+  const authorized = isAuthorizedEmail_(email);
   logAuthAttempt(email || 'unknown', authorized);
   return {
     authorized: authorized,
     email: email
+  };
+}
+
+function getClientConfig() {
+  authorizeOrThrow_();
+  return {
+    appName: CONFIG.APP_NAME,
+    refreshIntervalMs: CONFIG.REFRESH_INTERVAL_MS,
+    performanceGoal: CONFIG.PERFORMANCE_GOAL,
+    defaultStores: CONFIG.DEFAULT_STORES
   };
 }
 
@@ -163,8 +173,17 @@ function getChecklist(dateIso, store) {
 
   if (!filtered.length) {
     seedChecklistForDateStore_(sheet, targetDate, targetStore);
-    return getChecklist(targetDate, targetStore);
+    return getChecklistInternal_(sheet, targetDate, targetStore);
   }
+
+  return getChecklistInternal_(sheet, targetDate, targetStore);
+}
+
+function getChecklistInternal_(sheet, targetDate, targetStore) {
+  const rows = getDataRows_(sheet);
+  const filtered = rows.filter(function (row) {
+    return row.date === targetDate && row.store === targetStore;
+  });
 
   return {
     date: targetDate,
@@ -534,10 +553,16 @@ function buildChecklistSnapshot_(db) {
 }
 
 function authorizeOrThrow_() {
-  const status = getAuthStatus();
-  if (!status.authorized) {
+  const email = getCurrentUserEmail_();
+  const authorized = isAuthorizedEmail_(email);
+  if (!authorized) {
+    logAuthAttempt(email || 'unknown', false);
     throw new Error('Unauthorized access.');
   }
+}
+
+function isAuthorizedEmail_(email) {
+  return CONFIG.ALLOWED_EMAILS.indexOf(String(email || '').toLowerCase()) !== -1;
 }
 
 function getCurrentUserEmail_() {
