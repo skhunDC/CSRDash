@@ -461,18 +461,55 @@ function getCompetitionData_() {
 }
 
 function getEmployeeOfWeek_() {
-  const values = getOrCreateSpreadsheet_()
-    .getSheetByName(APP_CONFIG.sheets.employeeOfWeek)
-    .getDataRange()
-    .getValues();
-  const row = values[1] || [];
+  const sheet = getOrCreateSpreadsheet_().getSheetByName(APP_CONFIG.sheets.employeeOfWeek);
+  const row = sheet.getRange(2, 1, 1, 4);
+  const values = row.getValues()[0] || [];
+  const richText = row.getRichTextValues()[0] || [];
+  const imageCellValue = getCellLinkOrValue_(values[2], richText[2]);
 
   return {
-    name: row[0] || 'TBD',
-    quote: row[1] || 'Add a quote in the Employee_Of_Week sheet.',
-    imageUrl: row[2] || '',
-    highlight: row[3] || '',
+    name: values[0] || 'TBD',
+    quote: values[1] || 'Add a quote in the Employee_Of_Week sheet.',
+    imageUrl: normalizeImageUrl_(imageCellValue),
+    highlight: values[3] || '',
   };
+}
+
+function getCellLinkOrValue_(value, richTextValue) {
+  if (richTextValue && typeof richTextValue.getLinkUrl === 'function') {
+    const directLink = richTextValue.getLinkUrl();
+    if (directLink) {
+      return directLink;
+    }
+
+    const runs = richTextValue.getRuns();
+    for (let index = 0; index < runs.length; index += 1) {
+      const link = runs[index].getLinkUrl();
+      if (link) {
+        return link;
+      }
+    }
+  }
+
+  return value || '';
+}
+
+function normalizeImageUrl_(value) {
+  const input = String(value || '').trim();
+  if (!input) {
+    return '';
+  }
+
+  const driveMatch = input.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i)
+    || input.match(/[?&]id=([a-zA-Z0-9_-]+)/i)
+    || input.match(/^[a-zA-Z0-9_-]{20,}$/);
+
+  if (driveMatch) {
+    const fileId = driveMatch[1] || driveMatch[0];
+    return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w1200';
+  }
+
+  return input;
 }
 
 function calculateDeltaPercent_(current, previous) {

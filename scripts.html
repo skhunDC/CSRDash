@@ -18,6 +18,25 @@
     };
 
     const root = document.getElementById(state.isPrintMode ? 'print-app' : 'app');
+    window.CSRDashboardHandleEmployeeImageError = function(image) {
+      if (!image || image.dataset.fallbackApplied === 'true') {
+        return;
+      }
+
+      const fileId = extractDriveFileId(image.src);
+      if (!fileId) {
+        return;
+      }
+
+      image.dataset.fallbackApplied = 'true';
+      image.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
+    };
+
+    function extractDriveFileId(url) {
+      const match = String(url || '').match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+      return match ? match[1] : '';
+    }
+
 
     function boot() {
       if (!state.auth || !state.auth.authorized) {
@@ -393,7 +412,11 @@
     function renderEmployeeModule() {
       const employee = state.data.employeeOfWeek;
       const imageHtml = employee.imageUrl
-        ? `<img class="employee-avatar" src="${escapeHtml(employee.imageUrl)}" alt="${escapeAttribute(employee.name)}">`
+        ? `
+          <div class="employee-image-wrap">
+            <img class="employee-avatar" src="${escapeHtml(employee.imageUrl)}" alt="${escapeAttribute(employee.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="window.CSRDashboardHandleEmployeeImageError(this)">
+          </div>
+        `
         : `<div class="employee-avatar employee-fallback">${escapeHtml((employee.name || 'E').charAt(0).toUpperCase())}</div>`;
 
       return `
@@ -404,12 +427,12 @@
           </div>
         </div>
         <div class="employee-layout">
-          ${imageHtml}
-          <div>
+          <div class="employee-copy">
             <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
             <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
             ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
           </div>
+          ${imageHtml}
         </div>
       `;
     }
