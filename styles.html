@@ -600,9 +600,12 @@
 
   .employee-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 46%);
-    gap: 20px;
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    align-content: start;
+    flex: 1;
     min-height: 0;
   }
 
@@ -610,6 +613,11 @@
     display: grid;
     gap: 12px;
     min-width: 0;
+    padding: 18px;
+    border-radius: 24px;
+    border: 1px solid rgba(145, 207, 255, 0.12);
+    background: linear-gradient(180deg, rgba(17, 52, 76, 0.62), rgba(8, 28, 43, 0.42));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
   .employee-panel .section-title {
@@ -622,12 +630,12 @@
   }
 
   .employee-image-wrap {
-    width: min(100%, 440px);
-    aspect-ratio: 1 / 1;
-    justify-self: end;
-    align-self: center;
+    width: 100%;
+    height: clamp(220px, 25vh, 280px);
+    justify-self: stretch;
+    align-self: end;
     overflow: hidden;
-    border-radius: 28px;
+    border-radius: 24px;
     border: 1px solid rgba(145, 207, 255, 0.18);
     background: linear-gradient(135deg, rgba(64, 214, 255, 0.24), rgba(52, 211, 153, 0.2));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -638,47 +646,51 @@
     height: 100%;
     display: block;
     object-fit: cover;
-    object-position: center;
+    object-position: center 30%;
     background: linear-gradient(135deg, rgba(64, 214, 255, 0.24), rgba(52, 211, 153, 0.2));
   }
 
   .employee-fallback {
-    width: min(100%, 440px);
-    aspect-ratio: 1 / 1;
+    width: 100%;
+    height: clamp(220px, 25vh, 280px);
     display: grid;
     place-items: center;
-    justify-self: end;
-    align-self: center;
+    justify-self: stretch;
+    align-self: end;
     font-family: var(--font-display);
     font-size: clamp(2.4rem, 5vw, 4.2rem);
-    border-radius: 28px;
+    border-radius: 24px;
   }
 
   .employee-name {
     margin: 0;
-    font-size: clamp(1.9rem, 2.3vw, 2.35rem);
-    line-height: 1.05;
+    font-size: clamp(2rem, 2.5vw, 2.55rem);
+    line-height: 1.02;
   }
 
   .employee-quote {
     margin: 0;
     color: var(--text-muted);
-    font-size: 1.08rem;
-    line-height: 1.7;
+    font-size: 1.02rem;
+    line-height: 1.6;
   }
 
   .employee-quote-meta {
-    margin-top: 10px;
+    margin-top: 2px;
     color: var(--text-soft);
-    font-size: 0.84rem;
+    font-size: 0.78rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    line-height: 1.4;
+    line-height: 1.45;
   }
 
   .employee-panel .employee-highlight {
-    font-size: 0.92rem;
+    justify-self: start;
+    max-width: 100%;
+    font-size: 0.9rem;
+    line-height: 1.45;
     padding: 10px 14px;
+    white-space: normal;
   }
 
   .employee-quote-meta a {
