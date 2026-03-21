@@ -1,0 +1,152 @@
+# Dublin Cleaners CSR Dashboard
+
+## Overview
+This repository contains a production-oriented Google Apps Script HTMLService web app for a mounted TV CSR dashboard. The app is designed for a 1920×1080 display, uses a branded dark presentation layer, refreshes itself every 60 seconds, and keeps all operational content in Google Sheets so the team can update data without redeploying the app.
+
+## Design approach
+The dashboard is intentionally split into four visual zones that can be read from a distance:
+
+1. **Hero sales zone** for weekly sales, year-over-year delta, and store comparison.
+2. **CSR performance zone** for yesterday’s ranked dollars-per-hour productivity.
+3. **Task execution zone** as the primary operational focus.
+4. **Support zone** for schedule exceptions, competitions, and employee recognition.
+
+The visual system uses:
+- a dark atmospheric background to reduce TV glare
+- large display typography for fast readability
+- high-contrast color accents for status recognition
+- light animation for refreshes and task changes without becoming distracting
+- Dublin Cleaners branding and logo placement in the main hero and unauthorized state
+
+## Authentication and authorization
+### Authentication flow
+This app uses the most reliable built-in pattern available for Google Apps Script HTMLService web apps:
+- deploy the web app as **Execute as: User accessing the web app**
+- restrict deployment access appropriately in Apps Script
+- use `Session.getActiveUser().getEmail()` server-side to identify the signed-in Google account
+- authorize requests only if the email matches the approved allowlist
+
+### Allowed users
+- `skhun@dublincleaners.com`
+- `skhun1@dublincleaners.com`
+- `ss.sku@gmail.com`
+
+### Authorization behavior
+- The allowlist is enforced on the server in `Code.gs`
+- Unauthorized users never receive dashboard data from server-side methods
+- The initial HTML template receives only an authorization state object
+- Unauthorized users see a branded Unauthorized screen instead of the app
+- Task update actions and refresh actions also re-check authorization server-side
+
+### Important deployment note
+Because Google Apps Script identity behavior varies by Workspace/domain policy, the deployment should be configured and tested with the final target accounts. The manifest is set to `executeAs: USER_ACCESSING` and `access: ANYONE` so both the two Dublin Cleaners accounts and the approved Gmail account can reach the sign-in boundary, while the server-side allowlist remains the real access control.
+
+## Google Sheets data model
+The app stores data in a spreadsheet named **CSR Dashboard Data**. The spreadsheet is created automatically if it does not already exist. Its ID is persisted in Script Properties under `CSR_DASHBOARD_SPREADSHEET_ID`.
+
+### Auto-created sheets
+If missing, the app creates and seeds these sheets:
+- `Sales`
+- `CSR_Performance`
+- `Tasks`
+- `Schedule`
+- `Competitions`
+- `Employee_Of_Week`
+
+### Sheet schemas
+#### Sales
+| Column | Purpose |
+| --- | --- |
+| Week Label | Current reporting week label |
+| Store | Store name |
+| Current Year Sales | Current year weekly sales |
+| Last Year Sales | Prior year weekly sales |
+
+#### CSR_Performance
+| Column | Purpose |
+| --- | --- |
+| Date | Source date |
+| CSR | Employee name |
+| Sales | Dollars sold |
+| Hours | Hours worked |
+
+#### Tasks
+| Column | Purpose |
+| --- | --- |
+| Display Order | Render order on the dashboard |
+| Task | Task name |
+| Assigned CSR | Owner |
+| Completed | TRUE/FALSE toggle |
+| Updated At | Timestamp of latest dashboard toggle |
+
+#### Schedule
+| Column | Purpose |
+| --- | --- |
+| Date | Scheduled date |
+| CSR | Employee name |
+| Status | `OFF` or working status |
+| Notes | Optional note |
+
+#### Competitions
+| Column | Purpose |
+| --- | --- |
+| Category | `Conversions`, `Patio Signups`, or `Alterations` |
+| CSR | Employee name |
+| Value | Current score |
+| Goal | Goal for progress bar |
+| Notes | Optional coaching note |
+
+#### Employee_Of_Week
+| Column | Purpose |
+| --- | --- |
+| Name | Employee name |
+| Quote | Recognition quote |
+| Image URL | Optional image |
+| Highlight | Supporting recognition copy |
+
+## Application files
+- `Code.gs`: server-side Apps Script logic, authorization, sheet setup, and data shaping
+- `index.html`: main TV dashboard container
+- `styles.html`: shared visual system and layout styles
+- `scripts.html`: client-side rendering, refresh, and interactions
+- `print.html`: printable simplified summary view
+- `appsscript.json`: manifest, runtime, web app mode, and scopes
+
+## Setup and deployment
+1. Create or open the Apps Script project.
+2. Copy these files into the project root.
+3. Deploy as a web app.
+4. Use **Execute as: User accessing the web app**.
+5. Restrict access to the intended user group in the deployment settings.
+6. Open the deployed app once as an authorized user to let the spreadsheet auto-create.
+7. Edit the generated spreadsheet to replace seeded sample data with live operational data.
+
+## Usage notes
+- The dashboard refreshes every 60 seconds automatically.
+- Task owners are edited in Google Sheets.
+- Task completion can be toggled on the dashboard and is persisted back to Sheets.
+- The “Reseed demo data” action can restore the default seeded rows for demonstrations.
+- The printable summary view is exposed from the same web app deployment.
+
+## Testing approach
+The `test` directory contains a lightweight Node-based validation suite focused on static and structural checks for this repository.
+
+It verifies:
+- required project files exist
+- the Apps Script manifest contains the expected web app settings and scopes
+- `Code.gs` includes required allowlisted users, sheet names, and task labels
+- HTML partials include key rendering hooks for authentication, auto-refresh, and task interactions
+
+### Run tests
+```bash
+cd test
+npm install
+npm test
+```
+
+## Assumptions and implementation decisions
+- The app uses Google Sheets as the only persistence layer to keep editing simple for operations staff.
+- Sample data is seeded automatically for first-run usability and easier QA.
+- The web app is optimized for TV display first, not for editing-intensive mobile workflows.
+- The print view is intentionally simplified for managers who need a quick paper-friendly task summary.
+- The app uses progressive enhancement in the browser, but all sensitive authorization decisions remain on the server.
