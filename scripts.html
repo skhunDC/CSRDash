@@ -9,6 +9,8 @@
       activeCompetitionTab: 'Conversions',
       refreshTimer: null,
       loading: false,
+      loadingStartedAt: 0,
+      loadingTicker: null,
       isPrintMode: Boolean(window.CSR_DASHBOARD_PRINT_MODE),
     };
 
@@ -20,7 +22,6 @@
         return;
       }
 
-      renderLoading('Loading dashboard');
       fetchDashboardData();
       scheduleRefresh();
     }
@@ -34,9 +35,12 @@
 
     function fetchDashboardData(isRefresh) {
       state.loading = true;
+      if (!isRefresh || !state.data) {
+        startLoading(isRefresh ? 'Refreshing dashboard' : 'Loading dashboard');
+      }
       google.script.run
         .withSuccessHandler(function(payload) {
-          state.loading = false;
+          stopLoading();
           state.data = payload;
           if (!payload.competitions.categories[state.activeCompetitionTab]) {
             state.activeCompetitionTab = payload.competitions.tabs[0];
@@ -44,7 +48,7 @@
           render(isRefresh);
         })
         .withFailureHandler(function(error) {
-          state.loading = false;
+          stopLoading();
           renderError(error && error.message ? error.message : 'Unable to load dashboard data.');
         })
         [isRefresh ? 'refreshDashboardData' : 'getInitialDashboardData']();
@@ -352,8 +356,42 @@
       `;
     }
 
-    function renderLoading(message) {
-      root.innerHTML = `<div class="loading-state"><div><div class="eyebrow">Please wait</div><h1 class="section-title">${escapeHtml(message)}</h1></div></div>`;
+    function startLoading(message) {
+      state.loading = true;
+      state.loadingStartedAt = Date.now();
+      clearInterval(state.loadingTicker);
+      renderLoading(message, 0);
+      state.loadingTicker = setInterval(function() {
+        updateLoadingTimer();
+      }, 100);
+    }
+
+    function stopLoading() {
+      state.loading = false;
+      clearInterval(state.loadingTicker);
+      state.loadingTicker = null;
+    }
+
+    function updateLoadingTimer() {
+      const timerNode = root.querySelector('[data-loading-timer]');
+      if (!timerNode || !state.loadingStartedAt) {
+        return;
+      }
+
+      timerNode.textContent = 'Elapsed ' + formatLoadingDuration(Date.now() - state.loadingStartedAt);
+    }
+
+    function renderLoading(message, elapsedMs) {
+      root.innerHTML = `
+        <div class="loading-state">
+          <div class="loading-copy">
+            <div class="eyebrow">Please wait</div>
+            <h1 class="section-title">${escapeHtml(message)}</h1>
+            <p class="loading-timer" data-loading-timer>Elapsed ${formatLoadingDuration(elapsedMs)}</p>
+          </div>
+          <div class="loading-spinner" aria-hidden="true"></div>
+        </div>
+      `;
     }
 
     function renderError(message) {
@@ -447,6 +485,10 @@
       const normalized = Number(value) || 0;
       const prefix = normalized > 0 ? '+' : '';
       return prefix + normalized.toFixed(1) + '%';
+    }
+
+    function formatLoadingDuration(value) {
+      return ((Number(value) || 0) / 1000).toFixed(1) + 's';
     }
 
     function escapeHtml(value) {

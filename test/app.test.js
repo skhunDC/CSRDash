@@ -83,4 +83,6 @@ test('client HTML includes auth-aware shell, refresh handling, and print mode', 
   assert.match(scriptsHtml, /renderUnauthorized/);
   assert.match(scriptsHtml, /updateTask\(/);
   assert.match(scriptsHtml, /Competition Module/);
+  assert.match(scriptsHtml, /data-loading-timer/);
+  assert.match(scriptsHtml, /formatLoadingDuration/);
 });
