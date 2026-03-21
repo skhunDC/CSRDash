@@ -101,7 +101,7 @@ If missing, the app creates these sheets:
 | Column | Purpose |
 | --- | --- |
 | Name | Employee name |
-| Quote | Recognition quote |
+| Quote | Optional fallback quote used only if the daily quote API is unavailable |
 | Image URL | Optional image |
 | Highlight | Supporting recognition copy |
 
@@ -111,7 +111,7 @@ If missing, the app creates these sheets:
 | CSR | Active CSR roster name |
 
 ## Application files
-- `Code.gs`: server-side Apps Script logic, authorization, sheet setup, and data shaping
+- `Code.gs`: server-side Apps Script logic, authorization, sheet setup, data shaping, and cached daily quote API integration
 - `index.html`: main TV dashboard container
 - `styles.html`: shared visual system and layout styles
 - `scripts.html`: client-side rendering, refresh, and interactions
@@ -156,3 +156,9 @@ npm test
 - The web app is optimized for TV display first, not for editing-intensive mobile workflows.
 - The print view is intentionally simplified for managers who need a quick paper-friendly task summary.
 - The app uses progressive enhancement in the browser, but all sensitive authorization decisions remain on the server.
+
+## Daily service quote behavior
+- The Employee of the Week panel now requests one quote per day from a free quote API on the server side.
+- The app tries They Said So management quote of the day first, then falls back to ZenQuotes if needed.
+- The response is cached in Apps Script properties/cache for the current date so the TV refresh cycle does not repeatedly call the external API.
+- If both APIs are unavailable, the `Employee_Of_Week` sheet `Quote` cell is used as the on-screen fallback.

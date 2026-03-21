@@ -6,6 +6,19 @@ const APP_CONFIG = Object.freeze({
     'ss.sku@gmail.com',
   ]),
   refreshIntervalMs: 60 * 1000,
+  quoteCacheKeyPrefix: 'CSR_DAILY_SERVICE_QUOTE_',
+  serviceQuoteApis: Object.freeze([
+    Object.freeze({
+      name: 'They Said So',
+      url: 'https://quotes.rest/qod.json?category=management',
+      homepage: 'https://theysaidso.com/api',
+    }),
+    Object.freeze({
+      name: 'ZenQuotes',
+      url: 'https://zenquotes.io/api/today',
+      homepage: 'https://zenquotes.io/',
+    }),
+  ]),
   logoUrl:
     'https://www.dublincleaners.com/wp-content/uploads/2024/12/Dublin-Logos-stacked.png',
   sheets: Object.freeze({
@@ -466,13 +479,137 @@ function getEmployeeOfWeek_() {
   const values = row.getValues()[0] || [];
   const richText = row.getRichTextValues()[0] || [];
   const imageCellValue = getCellLinkOrValue_(values[2], richText[2]);
+  const sheetQuote = values[1] || '';
+  const dailyQuote = getDailyServiceQuote_(sheetQuote);
 
   return {
     name: values[0] || 'TBD',
-    quote: values[1] || 'Add a quote in the Employee_Of_Week sheet.',
+    quote: dailyQuote.text,
+    quoteAuthor: dailyQuote.author,
+    quoteSource: dailyQuote.source,
+    quoteSourceUrl: dailyQuote.sourceUrl,
     imageUrl: normalizeImageUrl_(imageCellValue),
     highlight: values[3] || '',
   };
+}
+
+function getDailyServiceQuote_(fallbackQuote) {
+  const todayKey = APP_CONFIG.quoteCacheKeyPrefix + getCurrentDateKey_();
+  const scriptCache = CacheService.getScriptCache();
+  const cachedQuote = scriptCache.get(todayKey);
+
+  if (cachedQuote) {
+    return parseCachedDailyQuote_(cachedQuote, fallbackQuote);
+  }
+
+  const storedQuote = PropertiesService.getScriptProperties().getProperty(todayKey);
+  if (storedQuote) {
+    scriptCache.put(todayKey, storedQuote, 6 * 60 * 60);
+    return parseCachedDailyQuote_(storedQuote, fallbackQuote);
+  }
+
+  const freshQuote = fetchDailyServiceQuote_();
+  const quotePayload = freshQuote || buildFallbackServiceQuote_(fallbackQuote);
+  const serializedQuote = JSON.stringify(quotePayload);
+
+  scriptCache.put(todayKey, serializedQuote, 6 * 60 * 60);
+  PropertiesService.getScriptProperties().setProperty(todayKey, serializedQuote);
+
+  return quotePayload;
+}
+
+function fetchDailyServiceQuote_() {
+  for (let index = 0; index < APP_CONFIG.serviceQuoteApis.length; index += 1) {
+    const api = APP_CONFIG.serviceQuoteApis[index];
+
+    try {
+      const response = UrlFetchApp.fetch(api.url, {
+        headers: { Accept: 'application/json' },
+        muteHttpExceptions: true,
+      });
+      const statusCode = response.getResponseCode();
+
+      if (statusCode < 200 || statusCode >= 300) {
+        continue;
+      }
+
+      const parsedQuote = parseServiceQuoteResponse_(api, response.getContentText());
+      if (parsedQuote) {
+        return parsedQuote;
+      }
+    } catch (error) {
+      console.warn('Unable to fetch service quote from %s: %s', api.name, error);
+    }
+  }
+
+  return null;
+}
+
+function parseServiceQuoteResponse_(api, responseText) {
+  const payload = JSON.parse(responseText || '{}');
+
+  if (api.name === 'They Said So') {
+    const quoteEntry = payload
+      && payload.contents
+      && payload.contents.quotes
+      && payload.contents.quotes[0];
+
+    return quoteEntry
+      ? normalizeDailyServiceQuote_(quoteEntry.quote, quoteEntry.author, api)
+      : null;
+  }
+
+  if (api.name === 'ZenQuotes') {
+    const quoteEntry = Array.isArray(payload) ? payload[0] : null;
+
+    return quoteEntry
+      ? normalizeDailyServiceQuote_(quoteEntry.q, quoteEntry.a, api)
+      : null;
+  }
+
+  return null;
+}
+
+function normalizeDailyServiceQuote_(quoteText, authorName, api) {
+  const text = String(quoteText || '').trim();
+  if (!text) {
+    return null;
+  }
+
+  return {
+    text,
+    author: String(authorName || '').trim(),
+    source: api.name,
+    sourceUrl: api.homepage,
+  };
+}
+
+function parseCachedDailyQuote_(serializedQuote, fallbackQuote) {
+  try {
+    const payload = JSON.parse(serializedQuote);
+    if (payload && payload.text) {
+      return payload;
+    }
+  } catch (error) {
+    console.warn('Unable to parse cached daily service quote: %s', error);
+  }
+
+  return buildFallbackServiceQuote_(fallbackQuote);
+}
+
+function buildFallbackServiceQuote_(fallbackQuote) {
+  const text = String(fallbackQuote || '').trim() || 'Great service starts with listening, care, and consistency.';
+
+  return {
+    text,
+    author: '',
+    source: fallbackQuote ? 'Employee_Of_Week sheet fallback' : 'Built-in fallback',
+    sourceUrl: '',
+  };
+}
+
+function getCurrentDateKey_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Etc/UTC', 'yyyy-MM-dd');
 }
 
 function getCellLinkOrValue_(value, richTextValue) {
