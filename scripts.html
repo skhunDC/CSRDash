@@ -106,7 +106,9 @@
       updateHeroPanel();
       updatePerformancePanel();
       updateTasksPanel(changedTaskName);
-      updateSupportModules();
+      updateSchedulePanel();
+      updateCompetitionPanel();
+      updateEmployeePanel();
 
       if (isRefresh) {
         pulseMetrics();
@@ -118,8 +120,10 @@
         <main class="dashboard">
           <section class="panel hero-panel" data-panel="hero"></section>
           <section class="panel performance-panel" data-panel="performance"></section>
+          <section class="panel schedule-panel" data-panel="schedule"></section>
           <section class="panel tasks-panel" data-panel="tasks"></section>
-          <section class="panel support-panel" data-panel="support"></section>
+          <section class="panel competition-panel" data-panel="competition"></section>
+          <section class="panel employee-panel" data-panel="employee"></section>
         </main>
       `;
     }
@@ -149,19 +153,35 @@
       bindTaskEvents(panel);
     }
 
-    function updateSupportModules() {
-      const panel = root.querySelector('[data-panel="support"]');
+    function updateSchedulePanel() {
+      const panel = root.querySelector('[data-panel="schedule"]');
       if (!panel) {
         return;
       }
-      panel.innerHTML = renderSupportModules();
+      panel.innerHTML = renderScheduleModule();
+    }
+
+    function updateCompetitionPanel() {
+      const panel = root.querySelector('[data-panel="competition"]');
+      if (!panel) {
+        return;
+      }
+      panel.innerHTML = renderCompetitionModule();
       bindCompetitionEvents(panel);
     }
 
+    function updateEmployeePanel() {
+      const panel = root.querySelector('[data-panel="employee"]');
+      if (!panel) {
+        return;
+      }
+      panel.innerHTML = renderEmployeeModule();
+    }
+
     function updateCompetitionModule(animate) {
-      const shell = root.querySelector('[data-competition-module]');
+      const shell = root.querySelector('[data-panel="competition"]');
       if (!shell) {
-        updateSupportModules();
+        updateCompetitionPanel();
         return;
       }
 
@@ -270,42 +290,40 @@
     function renderTasks(changedTaskName) {
       const tasks = state.data.tasks;
       return `
-          <div class="tasks-side">
-            <div class="section-head">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">Today’s Tasks</h2>
+              <div class="section-copy">Primary focus area. Assign owners in Sheets, then confirm completion directly on the dashboard.</div>
+            </div>
+            <span class="refresh-chip">${tasks.summary.progressPercent}% complete</span>
+          </div>
+          <div class="tasks-summary">
+            <div class="summary-grid">
               <div>
-                <h2 class="section-title">Today’s Tasks</h2>
-                <div class="section-copy">Primary focus area. Assign owners in Sheets, then confirm completion directly on the dashboard.</div>
+                <div class="summary-label">Complete</div>
+                <div class="summary-value">${tasks.summary.completed}</div>
+              </div>
+              <div>
+                <div class="summary-label">Unassigned</div>
+                <div class="summary-value">${tasks.summary.unassigned}</div>
+              </div>
+              <div>
+                <div class="summary-label">Total</div>
+                <div class="summary-value">${tasks.summary.total}</div>
               </div>
             </div>
-            <div class="tasks-summary">
-              <div class="section-copy">Completion snapshot</div>
-              <div class="summary-grid">
-                <div>
-                  <div class="summary-label">Complete</div>
-                  <div class="summary-value">${tasks.summary.completed}</div>
-                </div>
-                <div>
-                  <div class="summary-label">Unassigned</div>
-                  <div class="summary-value">${tasks.summary.unassigned}</div>
-                </div>
-                <div>
-                  <div class="summary-label">Total</div>
-                  <div class="summary-value">${tasks.summary.total}</div>
-                </div>
-              </div>
-              <div class="summary-bar"><span style="--fill:${tasks.summary.progressPercent}%"></span></div>
-            </div>
+            <div class="summary-bar"><span style="--fill:${tasks.summary.progressPercent}%"></span></div>
           </div>
           <div class="task-list">
             ${tasks.entries.map(function(entry) {
               const changedClass = changedTaskName === entry.task ? 'changed' : '';
               return `
                 <div class="task-row ${entry.completed ? 'completed' : ''} ${changedClass}">
-                  <div>
+                  <div class="task-primary">
                     <div class="task-name">${escapeHtml(entry.task)}</div>
                     <div class="task-meta">${entry.updatedAt ? 'Updated ' + escapeHtml(entry.updatedAt) : 'Awaiting completion update'}</div>
                   </div>
-                  <div>
+                  <div class="task-assignment">
                     <div class="task-meta">Assigned CSR</div>
                     <div>${escapeHtml(entry.assignedCsr || 'Unassigned')}</div>
                   </div>
@@ -321,44 +339,19 @@
       `;
     }
 
-    function renderSupportModules() {
+    function renderScheduleModule() {
       const schedule = state.data.schedule;
-      const employee = state.data.employeeOfWeek;
-      const imageHtml = employee.imageUrl
-        ? `<img class="employee-avatar" src="${escapeHtml(employee.imageUrl)}" alt="${escapeAttribute(employee.name)}">`
-        : `<div class="employee-avatar employee-fallback">${escapeHtml((employee.name || 'E').charAt(0).toUpperCase())}</div>`;
 
       return `
-        <div class="module">
-          <div class="section-head">
-            <div>
-              <h2 class="section-title">Schedule Snapshot</h2>
-              <div class="section-copy">Who is off today and tomorrow.</div>
-            </div>
-          </div>
-          <div class="schedule-days">
-            ${renderScheduleDay('Today', schedule.today.off)}
-            ${renderScheduleDay('Tomorrow', schedule.tomorrow.off)}
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Schedule Snapshot</h2>
+            <div class="section-copy">Who is off today and tomorrow.</div>
           </div>
         </div>
-        <div class="module" data-competition-module>
-          ${renderCompetitionModule()}
-        </div>
-        <div class="module">
-          <div class="section-head">
-            <div>
-              <h2 class="section-title">Employee of the Week</h2>
-              <div class="section-copy">Recognition block powered directly from Google Sheets.</div>
-            </div>
-          </div>
-          <div class="employee-layout">
-            ${imageHtml}
-            <div>
-              <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
-              <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
-              ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
-            </div>
-          </div>
+        <div class="schedule-days">
+          ${renderScheduleDay('Today', schedule.today.off)}
+          ${renderScheduleDay('Tomorrow', schedule.tomorrow.off)}
         </div>
       `;
     }
@@ -393,6 +386,30 @@
               </div>
             `;
           }).join('') || '<div class="subtle-empty">Add competition rows to the Competitions sheet for this tab.</div>'}
+        </div>
+      `;
+    }
+
+    function renderEmployeeModule() {
+      const employee = state.data.employeeOfWeek;
+      const imageHtml = employee.imageUrl
+        ? `<img class="employee-avatar" src="${escapeHtml(employee.imageUrl)}" alt="${escapeAttribute(employee.name)}">`
+        : `<div class="employee-avatar employee-fallback">${escapeHtml((employee.name || 'E').charAt(0).toUpperCase())}</div>`;
+
+      return `
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Employee of the Week</h2>
+            <div class="section-copy">Recognition block powered directly from Google Sheets.</div>
+          </div>
+        </div>
+        <div class="employee-layout">
+          ${imageHtml}
+          <div>
+            <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
+            <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
+            ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
+          </div>
         </div>
       `;
     }

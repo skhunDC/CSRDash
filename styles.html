@@ -71,8 +71,8 @@
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-columns: 1.6fr 1fr;
-    grid-template-rows: 1.16fr 1fr;
+    grid-template-columns: 1.45fr 1fr 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
     gap: 20px;
     animation: stage-in 600ms var(--transition);
   }
@@ -85,6 +85,7 @@
     background: linear-gradient(180deg, rgba(11, 36, 55, 0.88), rgba(6, 20, 31, 0.9));
     box-shadow: var(--shadow);
     backdrop-filter: blur(14px);
+    min-height: 0;
   }
 
   .panel::after {
@@ -280,6 +281,20 @@
     gap: 14px;
   }
 
+  .schedule-panel,
+  .competition-panel,
+  .employee-panel {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .schedule-panel {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
   .section-head {
     display: flex;
     justify-content: space-between;
@@ -299,7 +314,6 @@
   }
 
   .performance-list,
-  .task-list,
   .schedule-list,
   .competition-list {
     display: flex;
@@ -356,12 +370,6 @@
     grid-column: 1;
     grid-row: 2;
     padding: 22px;
-    display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap: 20px;
-  }
-
-  .tasks-side {
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -405,14 +413,30 @@
   }
 
   .task-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
     max-height: 100%;
-    padding-right: 4px;
   }
 
   .task-row {
-    grid-template-columns: 1.1fr 0.8fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'primary status'
+      'assignment status';
+    row-gap: 8px;
     padding: 12px 14px;
     transition: transform var(--transition), border-color var(--transition), background var(--transition);
+  }
+
+  .task-primary {
+    grid-area: primary;
+    min-width: 0;
+  }
+
+  .task-assignment {
+    grid-area: assignment;
+    min-width: 0;
   }
 
   .task-row.changed {
@@ -430,8 +454,10 @@
   }
 
   .task-status {
+    grid-area: status;
     display: flex;
     justify-content: flex-end;
+    align-items: center;
   }
 
   .status-pill {
@@ -451,21 +477,14 @@
     border-color: rgba(249, 184, 79, 0.28);
   }
 
-  .support-panel {
+  .competition-panel {
     grid-column: 2;
     grid-row: 2;
-    padding: 22px;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 14px;
-    align-content: start;
   }
 
-  .module {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-height: 0;
+  .employee-panel {
+    grid-column: 3;
+    grid-row: 2;
   }
 
   .schedule-row,
@@ -475,8 +494,8 @@
   }
 
   .schedule-days {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
   }
 
