@@ -154,7 +154,7 @@ npm test
 - The app uses Google Sheets as the only persistence layer to keep editing simple for operations staff.
 - Sales, schedule, competition, performance, and employee-recognition sheets are created with headers only so live data can be entered directly.
 - The web app is optimized for TV display first, not for editing-intensive mobile workflows.
-- The print view is intentionally simplified for managers who need a quick paper-friendly task summary.
+- The print workflow is intentionally simplified into an in-dashboard modal so managers can open, review, and print a paper-friendly task summary without leaving the main screen.
 - The app uses progressive enhancement in the browser, but all sensitive authorization decisions remain on the server.
 
 ## Daily service quote behavior

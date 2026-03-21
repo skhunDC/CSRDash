@@ -113,6 +113,9 @@ test('client HTML includes auth-aware shell, refresh handling, and print mode', 
   assert.match(scriptsHtml, /Daily quote via/);
   assert.match(scriptsHtml, /data-loading-timer/);
   assert.match(scriptsHtml, /formatLoadingDuration/);
+  assert.match(scriptsHtml, /data-open-print-modal/);
+  assert.match(scriptsHtml, /renderPrintModal/);
+  assert.match(scriptsHtml, /window\.print\(\)/);
   assert.doesNotMatch(scriptsHtml, /data-panel="support"/);
   assert.doesNotMatch(scriptsHtml, /Reseed demo data/);
   assert.doesNotMatch(read('Code.gs'), /seedDashboardData/);
