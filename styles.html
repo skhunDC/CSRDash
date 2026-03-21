@@ -494,15 +494,58 @@
     flex-wrap: wrap;
   }
 
+  .competition-head {
+    align-items: center;
+  }
+
+  .competition-tabs {
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 0 8px;
+  }
+
   .tab-chip {
     cursor: pointer;
-    transition: background var(--transition), color var(--transition), border-color var(--transition);
+    transition: transform var(--transition), background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+  }
+
+  .competition-tab-chip {
+    min-width: 150px;
+    justify-content: center;
+    padding: 12px 20px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    border-color: rgba(145, 207, 255, 0.24);
+    background: linear-gradient(180deg, rgba(20, 56, 80, 0.9), rgba(9, 27, 41, 0.84));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .competition-tab-chip:hover {
+    transform: translateY(-1px);
+    border-color: rgba(145, 207, 255, 0.4);
+  }
+
+  .competition-tab-conversions {
+    background: linear-gradient(180deg, rgba(20, 68, 95, 0.92), rgba(8, 34, 48, 0.88));
+  }
+
+  .competition-tab-patio-signups {
+    background: linear-gradient(180deg, rgba(23, 77, 69, 0.92), rgba(8, 34, 35, 0.88));
+  }
+
+  .competition-tab-alterations {
+    background: linear-gradient(180deg, rgba(72, 57, 98, 0.92), rgba(26, 18, 43, 0.88));
   }
 
   .tab-chip.active {
     color: #031723;
     background: linear-gradient(135deg, #9fe5ff, #40d6ff);
     border-color: transparent;
+    box-shadow: 0 14px 36px rgba(64, 214, 255, 0.26);
+    transform: translateY(-2px) scale(1.02);
   }
 
   .competition-row {
@@ -512,6 +555,11 @@
   .competition-list {
     gap: 8px;
     min-height: 0;
+  }
+
+  .competition-module-animate .competition-list,
+  .competition-module-animate .competition-tabs {
+    animation: competition-swap 320ms ease;
   }
 
   .competition-list .task-meta {
@@ -707,6 +755,11 @@
     0% { transform: scale(1); }
     35% { transform: scale(1.02); }
     100% { transform: scale(1); }
+  }
+
+  @keyframes competition-swap {
+    from { opacity: 0.7; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   @media print {
