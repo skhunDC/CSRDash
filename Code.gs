@@ -15,8 +15,27 @@ const APP_CONFIG = Object.freeze({
     schedule: 'Schedule',
     competitions: 'Competitions',
     employeeOfWeek: 'Employee_Of_Week',
+    employees: 'Employees',
   }),
   competitionTabs: Object.freeze(['Conversions', 'Patio Signups', 'Alterations']),
+  employeeCsrs: Object.freeze([
+    'Regina',
+    'Shelly',
+    'Nellie',
+    'Demetria',
+    'Dipali',
+    'Heather',
+    'Lynn',
+    'Lisa',
+    'Angela',
+    'Karmen',
+    'Omar',
+    'Kaylee',
+    'Ingrid',
+    'Kelly',
+    'Brandy',
+    'Cheyenne',
+  ]),
   tasks: Object.freeze([
     'Front Counter',
     'Phones',
@@ -111,16 +130,6 @@ function updateTaskStatus(taskName, completed, assignedCsr) {
   throw new Error('Task not found: ' + taskName);
 }
 
-function seedDashboardData() {
-  authorizeRequest_();
-  const spreadsheet = getOrCreateSpreadsheet_();
-  ensureAllSheets_(spreadsheet, true);
-  return {
-    ok: true,
-    spreadsheetId: spreadsheet.getId(),
-    spreadsheetUrl: spreadsheet.getUrl(),
-  };
-}
 
 function getDashboardData_() {
   const spreadsheet = getOrCreateSpreadsheet_();
@@ -181,28 +190,17 @@ function ensureAllSheets_(spreadsheet, forceSeed) {
   ensureScheduleSheet_(spreadsheet, forceSeed);
   ensureCompetitionsSheet_(spreadsheet, forceSeed);
   ensureEmployeeSheet_(spreadsheet, forceSeed);
+  ensureEmployeesRosterSheet_(spreadsheet, forceSeed);
 }
 
 function ensureSalesSheet_(spreadsheet, forceSeed) {
   const headers = ['Week Label', 'Store', 'Current Year Sales', 'Last Year Sales'];
-  const rows = [
-    ['Week 12', 'Dublin', 18540, 17110],
-    ['Week 12', 'Pleasanton', 16220, 15330],
-    ['Week 12', 'San Ramon', 14860, 15010],
-  ];
-  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.sales, headers, rows, forceSeed);
+  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.sales, headers, [], forceSeed);
 }
 
 function ensurePerformanceSheet_(spreadsheet, forceSeed) {
   const headers = ['Date', 'CSR', 'Sales', 'Hours'];
-  const yesterday = shiftDate_(new Date(), -1);
-  const rows = [
-    [yesterday, 'Sophia', 820, 6.5],
-    [yesterday, 'Mateo', 770, 7],
-    [yesterday, 'Avery', 690, 6],
-    [yesterday, 'Jordan', 510, 6.5],
-  ];
-  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.performance, headers, rows, forceSeed);
+  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.performance, headers, [], forceSeed);
 }
 
 function ensureTasksSheet_(spreadsheet, forceSeed) {
@@ -215,40 +213,25 @@ function ensureTasksSheet_(spreadsheet, forceSeed) {
 
 function ensureScheduleSheet_(spreadsheet, forceSeed) {
   const headers = ['Date', 'CSR', 'Status', 'Notes'];
-  const today = resetTime_(new Date());
-  const tomorrow = shiftDate_(today, 1);
-  const rows = [
-    [today, 'Sophia', 'WORKING', 'Opening shift'],
-    [today, 'Mateo', 'OFF', 'Vacation'],
-    [today, 'Avery', 'WORKING', 'Mid shift'],
-    [tomorrow, 'Jordan', 'OFF', 'Personal day'],
-    [tomorrow, 'Sophia', 'WORKING', 'Closing shift'],
-  ];
-  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.schedule, headers, rows, forceSeed);
+  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.schedule, headers, [], forceSeed);
 }
 
 function ensureCompetitionsSheet_(spreadsheet, forceSeed) {
   const headers = ['Category', 'CSR', 'Value', 'Goal', 'Notes'];
-  const rows = [
-    ['Conversions', 'Sophia', 18, 25, 'Strong close rate'],
-    ['Conversions', 'Mateo', 16, 25, 'Steady'],
-    ['Patio Signups', 'Avery', 12, 20, 'Leading signups'],
-    ['Patio Signups', 'Jordan', 9, 20, 'Needs support'],
-    ['Alterations', 'Sophia', 14, 18, 'Strong upsell'],
-    ['Alterations', 'Mateo', 11, 18, 'Solid week'],
-  ];
-  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.competitions, headers, rows, forceSeed);
+  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.competitions, headers, [], forceSeed);
 }
 
 function ensureEmployeeSheet_(spreadsheet, forceSeed) {
   const headers = ['Name', 'Quote', 'Image URL', 'Highlight'];
-  const rows = [[
-    'Sophia Ramirez',
-    'Great service is about making every guest feel expected, not just welcomed.',
-    '',
-    'Top guest feedback and strongest conversion improvement this week.',
-  ]];
-  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.employeeOfWeek, headers, rows, forceSeed);
+  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.employeeOfWeek, headers, [], forceSeed);
+}
+
+function ensureEmployeesRosterSheet_(spreadsheet, forceSeed) {
+  const headers = ['CSR'];
+  const rows = APP_CONFIG.employeeCsrs.map(function(name) {
+    return [name];
+  });
+  ensureSheetWithData_(spreadsheet, APP_CONFIG.sheets.employees, headers, rows, forceSeed);
 }
 
 function ensureSheetWithData_(spreadsheet, sheetName, headers, rows, forceSeed) {

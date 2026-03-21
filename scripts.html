@@ -66,16 +66,6 @@
         .updateTaskStatus(taskName, nextCompleted, assignedCsr);
     }
 
-    function seedData() {
-      google.script.run
-        .withSuccessHandler(function() {
-          fetchDashboardData(true);
-        })
-        .withFailureHandler(function(error) {
-          renderError(error && error.message ? error.message : 'Unable to seed sheet data.');
-        })
-        .seedDashboardData();
-    }
 
     function render(isRefresh, changedTaskName) {
       if (state.isPrintMode) {
@@ -154,7 +144,6 @@
             </div>
             <div class="hero-actions">
               <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer">Open source sheet</a>
-              <button class="sheet-chip seed-action" data-action="seed">Reseed demo data</button>
               ${state.printUrl ? `<a class="sheet-chip print-action" href="${escapeHtml(state.printUrl)}" target="_blank" rel="noopener noreferrer">Open print view</a>` : ''}
             </div>
           </div>
@@ -457,11 +446,6 @@
           render(true);
         });
       });
-
-      const seedButton = root.querySelector('[data-action="seed"]');
-      if (seedButton) {
-        seedButton.addEventListener('click', seedData);
-      }
     }
 
     function pulseMetrics() {
