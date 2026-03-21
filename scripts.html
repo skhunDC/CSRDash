@@ -174,6 +174,7 @@
       }
       panel.innerHTML = renderTasks(changedTaskName);
       bindTaskEvents(panel);
+      fitTasksPanel(panel);
     }
 
     function updateSchedulePanel() {
@@ -337,27 +338,29 @@
             </div>
             <div class="summary-bar"><span style="--fill:${tasks.summary.progressPercent}%"></span></div>
           </div>
-          <div class="task-list">
-            ${tasks.entries.map(function(entry) {
-              const changedClass = changedTaskName === entry.task ? 'changed' : '';
-              return `
-                <div class="task-row ${entry.completed ? 'completed' : ''} ${changedClass}">
-                  <div class="task-primary">
-                    <div class="task-name">${escapeHtml(entry.task)}</div>
-                    <div class="task-meta">${entry.updatedAt ? 'Updated ' + escapeHtml(entry.updatedAt) : 'Awaiting completion update'}</div>
+          <div class="task-list-viewport">
+            <div class="task-list">
+              ${tasks.entries.map(function(entry) {
+                const changedClass = changedTaskName === entry.task ? 'changed' : '';
+                return `
+                  <div class="task-row ${entry.completed ? 'completed' : ''} ${changedClass}">
+                    <div class="task-primary">
+                      <div class="task-name">${escapeHtml(entry.task)}</div>
+                      <div class="task-meta">${entry.updatedAt ? 'Updated ' + escapeHtml(entry.updatedAt) : 'Awaiting completion update'}</div>
+                    </div>
+                    <div class="task-assignment">
+                      <div class="task-meta">Assigned CSR</div>
+                      <div>${escapeHtml(entry.assignedCsr || 'Unassigned')}</div>
+                    </div>
+                    <div class="task-status">
+                      <button class="status-pill ${entry.completed ? 'complete' : 'pending'}" data-task="${escapeAttribute(entry.task)}" data-assignee="${escapeAttribute(entry.assignedCsr || '')}" data-completed="${String(entry.completed)}">
+                        ${entry.completed ? 'Completed' : 'Mark done'}
+                      </button>
+                    </div>
                   </div>
-                  <div class="task-assignment">
-                    <div class="task-meta">Assigned CSR</div>
-                    <div>${escapeHtml(entry.assignedCsr || 'Unassigned')}</div>
-                  </div>
-                  <div class="task-status">
-                    <button class="status-pill ${entry.completed ? 'complete' : 'pending'}" data-task="${escapeAttribute(entry.task)}" data-assignee="${escapeAttribute(entry.assignedCsr || '')}" data-completed="${String(entry.completed)}">
-                      ${entry.completed ? 'Completed' : 'Mark done'}
-                    </button>
-                  </div>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }).join('')}
+            </div>
           </div>
       `;
     }
@@ -613,6 +616,49 @@
       });
     }
 
+    function fitTasksPanel(panel) {
+      const taskViewport = panel.querySelector('.task-list-viewport');
+      const taskList = panel.querySelector('.task-list');
+      if (!taskViewport || !taskList) {
+        return;
+      }
+
+      const layouts = [
+        { density: 'default', columns: 2 },
+        { density: 'compact', columns: 2 },
+        { density: 'compact', columns: 3 },
+        { density: 'micro', columns: 3 },
+        { density: 'micro', columns: 4 },
+      ];
+
+      let bestLayout = layouts[0];
+      let bestScale = 0;
+
+      layouts.forEach(function(layout) {
+        panel.dataset.taskDensity = layout.density;
+        panel.dataset.taskColumns = String(layout.columns);
+        taskList.style.transform = 'scale(1)';
+
+        const widthScale = taskViewport.clientWidth / Math.max(taskList.scrollWidth, 1);
+        const heightScale = taskViewport.clientHeight / Math.max(taskList.scrollHeight, 1);
+        const scale = Math.min(1, widthScale, heightScale);
+
+        if (scale > bestScale) {
+          bestScale = scale;
+          bestLayout = layout;
+        }
+      });
+
+      panel.dataset.taskDensity = bestLayout.density;
+      panel.dataset.taskColumns = String(bestLayout.columns);
+      taskList.style.transform = 'scale(1)';
+
+      const finalWidthScale = taskViewport.clientWidth / Math.max(taskList.scrollWidth, 1);
+      const finalHeightScale = taskViewport.clientHeight / Math.max(taskList.scrollHeight, 1);
+      const finalScale = Math.min(1, finalWidthScale, finalHeightScale);
+      taskList.style.transform = 'scale(' + finalScale + ')';
+    }
+
     function bindCompetitionEvents(scope) {
       scope.querySelectorAll('[data-tab]').forEach(function(button) {
         button.addEventListener('click', function() {
@@ -671,6 +717,15 @@
         if (event.key === 'Escape' && state.isPrintModalOpen) {
           state.isPrintModalOpen = false;
           updatePrintModal();
+        }
+      });
+
+      window.addEventListener('resize', function() {
+        const panel = root && root.querySelector ? root.querySelector('[data-panel="tasks"]') : null;
+        if (panel) {
+          window.requestAnimationFrame(function() {
+            fitTasksPanel(panel);
+          });
         }
       });
     }

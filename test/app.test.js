@@ -94,7 +94,7 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
   assert.match(code, /UrlFetchApp\.fetch/);
 });
 
-test('client HTML includes auth-aware shell, refresh handling, print mode, and responsive tasks panel styles', () => {
+test('client HTML includes auth-aware shell, refresh handling, print mode, and fitted no-scroll tasks panel behavior', () => {
   const indexHtml = read('index.html');
   const scriptsHtml = read('scripts.html');
   const printHtml = read('print.html');
@@ -117,9 +117,12 @@ test('client HTML includes auth-aware shell, refresh handling, print mode, and r
   assert.match(scriptsHtml, /data-open-print-modal/);
   assert.match(scriptsHtml, /renderPrintModal/);
   assert.match(scriptsHtml, /window\.print\(\)/);
-  assert.match(stylesHtml, /grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 240px\), 1fr\)\)/);
-  assert.match(stylesHtml, /overflow: auto/);
-  assert.match(stylesHtml, /scrollbar-gutter: stable/);
+  assert.match(scriptsHtml, /fitTasksPanel\(/);
+  assert.match(scriptsHtml, /task-list-viewport/);
+  assert.match(stylesHtml, /\.task-list-viewport/);
+  assert.match(stylesHtml, /transform-origin: top left/);
+  assert.match(stylesHtml, /data-task-columns='4'/);
+  assert.match(stylesHtml, /data-task-density='micro'/);
   assert.doesNotMatch(scriptsHtml, /data-panel="support"/);
   assert.doesNotMatch(scriptsHtml, /Reseed demo data/);
   assert.doesNotMatch(read('Code.gs'), /seedDashboardData/);
