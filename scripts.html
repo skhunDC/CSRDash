@@ -423,13 +423,19 @@
         <div class="section-head">
           <div>
             <h2 class="section-title">Employee of the Week</h2>
-            <div class="section-copy">Recognition block powered directly from Google Sheets.</div>
+            <div class="section-copy">Recognition block with a daily service quote delivered by API.</div>
           </div>
         </div>
         <div class="employee-layout">
           <div class="employee-copy">
             <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
             <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
+            ${(employee.quoteAuthor || employee.quoteSource) ? `
+              <div class="employee-quote-meta">
+                ${employee.quoteAuthor ? `<span>— ${escapeHtml(employee.quoteAuthor)}</span>` : ''}
+                ${employee.quoteSource ? `<span>${employee.quoteAuthor ? ' · ' : ''}Daily quote via ${employee.quoteSourceUrl ? `<a href="${escapeAttribute(employee.quoteSourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(employee.quoteSource)}</a>` : escapeHtml(employee.quoteSource)}</span>` : ''}
+              </div>
+            ` : ''}
             ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
           </div>
           ${imageHtml}

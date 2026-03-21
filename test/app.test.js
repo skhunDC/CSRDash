@@ -87,6 +87,11 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
   assert.match(code, /Session\.getActiveUser\(\)\.getEmail\(\)/);
   assert.match(code, /updateTaskStatus/);
   assert.match(code, /ensureAllSheets_/);
+  assert.match(code, /getDailyServiceQuote_/);
+  assert.match(code, /quotes\.rest\/qod\.json\?category=management/);
+  assert.match(code, /zenquotes\.io\/api\/today/);
+  assert.match(code, /CacheService\.getScriptCache/);
+  assert.match(code, /UrlFetchApp\.fetch/);
 });
 
 test('client HTML includes auth-aware shell, refresh handling, and print mode', () => {
@@ -104,6 +109,8 @@ test('client HTML includes auth-aware shell, refresh handling, and print mode', 
   assert.match(scriptsHtml, /data-panel="competition"/);
   assert.match(scriptsHtml, /data-panel="employee"/);
   assert.match(scriptsHtml, /renderEmployeeModule/);
+  assert.match(scriptsHtml, /employee-quote-meta/);
+  assert.match(scriptsHtml, /Daily quote via/);
   assert.match(scriptsHtml, /data-loading-timer/);
   assert.match(scriptsHtml, /formatLoadingDuration/);
   assert.doesNotMatch(scriptsHtml, /data-panel="support"/);
