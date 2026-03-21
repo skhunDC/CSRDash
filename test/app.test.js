@@ -100,8 +100,13 @@ test('client HTML includes auth-aware shell, refresh handling, and print mode', 
   assert.match(scriptsHtml, /renderUnauthorized/);
   assert.match(scriptsHtml, /updateTask\(/);
   assert.match(scriptsHtml, /Competition Module/);
+  assert.match(scriptsHtml, /data-panel="schedule"/);
+  assert.match(scriptsHtml, /data-panel="competition"/);
+  assert.match(scriptsHtml, /data-panel="employee"/);
+  assert.match(scriptsHtml, /renderEmployeeModule/);
   assert.match(scriptsHtml, /data-loading-timer/);
   assert.match(scriptsHtml, /formatLoadingDuration/);
+  assert.doesNotMatch(scriptsHtml, /data-panel="support"/);
   assert.doesNotMatch(scriptsHtml, /Reseed demo data/);
   assert.doesNotMatch(read('Code.gs'), /seedDashboardData/);
 });
