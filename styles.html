@@ -256,6 +256,10 @@
     gap: 10px;
   }
 
+  .hero-actions button {
+    font: inherit;
+  }
+
   .sheet-chip,
   .print-action,
   .seed-action {
@@ -771,6 +775,54 @@
     overflow: auto;
   }
 
+  body.print-modal-open {
+    overflow: hidden;
+  }
+
+  .print-modal-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+  }
+
+  .print-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 19, 31, 0.74);
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+  }
+
+  .print-modal {
+    position: absolute;
+    inset: 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 26px;
+    border-radius: var(--radius-xl);
+    border: 1px solid rgba(145, 207, 255, 0.2);
+    background: linear-gradient(180deg, rgba(8, 28, 42, 0.96), rgba(4, 18, 29, 0.98));
+    box-shadow: var(--shadow);
+    overflow: auto;
+    pointer-events: auto;
+  }
+
+  .print-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    padding-bottom: 8px;
+  }
+
+  .print-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
   .print-layout {
     max-width: 1080px;
     margin: 0 auto;
@@ -843,8 +895,35 @@
       color: #111;
     }
 
-    body::before {
+    body::before,
+    .dashboard,
+    .print-modal-backdrop,
+    .print-modal-header,
+    .no-print {
       display: none;
+    }
+
+    .app-shell {
+      width: auto;
+      height: auto;
+      padding: 0;
+      background: #fff;
+    }
+
+    .print-modal-layer {
+      position: static;
+      pointer-events: auto;
+    }
+
+    .print-modal {
+      position: static;
+      inset: auto;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      overflow: visible;
     }
   }
 </style>

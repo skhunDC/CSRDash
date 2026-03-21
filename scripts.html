@@ -15,6 +15,7 @@
       loadingStartedAt: 0,
       loadingTicker: null,
       isPrintMode: Boolean(window.CSR_DASHBOARD_PRINT_MODE),
+      isPrintModalOpen: false,
     };
 
     const root = document.getElementById(state.isPrintMode ? 'print-app' : 'app');
@@ -44,6 +45,7 @@
         return;
       }
 
+      bindGlobalEvents();
       fetchDashboardData();
       scheduleRefresh();
       scheduleCompetitionRotation();
@@ -128,6 +130,7 @@
       updateSchedulePanel();
       updateCompetitionPanel();
       updateEmployeePanel();
+      updatePrintModal();
 
       if (isRefresh) {
         pulseMetrics();
@@ -144,6 +147,7 @@
           <section class="panel competition-panel" data-panel="competition"></section>
           <section class="panel employee-panel" data-panel="employee"></section>
         </main>
+        <div class="print-modal-layer" data-print-modal-layer></div>
       `;
     }
 
@@ -269,7 +273,7 @@
             </div>
             <div class="hero-actions">
               <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer">Open source sheet</a>
-              ${state.printUrl ? `<a class="sheet-chip print-action" href="${escapeHtml(state.printUrl)}" target="_blank" rel="noopener noreferrer">Open print view</a>` : ''}
+              <button class="sheet-chip print-action" type="button" data-open-print-modal>Open print view</button>
             </div>
           </div>
       `;
@@ -529,9 +533,13 @@
     }
 
     function renderPrint() {
+      root.innerHTML = renderPrintLayout();
+    }
+
+    function renderPrintLayout() {
       const tasks = state.data.tasks.entries;
-      root.innerHTML = `
-        <section class="print-layout ${state.loading ? '' : 'fade-swap'}">
+      return `
+        <section class="print-layout ${state.loading ? '' : 'fade-swap'}" data-print-layout>
           <div class="print-card">
             <img class="brand-logo" src="${escapeHtml(state.logoUrl)}" alt="Dublin Cleaners logo">
             <div class="eyebrow">Printable operations view</div>
@@ -563,6 +571,37 @@
       `;
     }
 
+    function updatePrintModal() {
+      const modalLayer = root.querySelector('[data-print-modal-layer]');
+      if (!modalLayer) {
+        return;
+      }
+
+      document.body.classList.toggle('print-modal-open', state.isPrintModalOpen);
+      modalLayer.innerHTML = state.isPrintModalOpen ? renderPrintModal() : '';
+      bindHeroActions(root);
+      bindPrintModalEvents(modalLayer);
+    }
+
+    function renderPrintModal() {
+      return `
+        <div class="print-modal-backdrop" data-close-print-modal></div>
+        <section class="print-modal" role="dialog" aria-modal="true" aria-labelledby="print-modal-title">
+          <div class="print-modal-header">
+            <div>
+              <div class="eyebrow">Quick print view</div>
+              <h2 class="print-title" id="print-modal-title">CSR Dashboard Summary</h2>
+            </div>
+            <div class="print-modal-actions no-print">
+              <button class="sheet-chip print-action" type="button" data-trigger-browser-print>Print now</button>
+              <button class="sheet-chip" type="button" data-close-print-modal>Close</button>
+            </div>
+          </div>
+          ${renderPrintLayout()}
+        </section>
+      `;
+    }
+
     function bindTaskEvents(scope) {
       scope.querySelectorAll('[data-task]').forEach(function(button) {
         button.addEventListener('click', function() {
@@ -583,12 +622,56 @@
       });
     }
 
+    function bindHeroActions(scope) {
+      const openButton = scope.querySelector('[data-open-print-modal]');
+      if (!openButton || openButton.dataset.bound === 'true') {
+        return;
+      }
+
+      openButton.dataset.bound = 'true';
+      openButton.addEventListener('click', function() {
+        state.isPrintModalOpen = true;
+        updatePrintModal();
+      });
+    }
+
+    function bindPrintModalEvents(scope) {
+      scope.querySelectorAll('[data-close-print-modal]').forEach(function(button) {
+        if (button.dataset.bound === 'true') {
+          return;
+        }
+
+        button.dataset.bound = 'true';
+        button.addEventListener('click', function() {
+          state.isPrintModalOpen = false;
+          updatePrintModal();
+        });
+      });
+
+      const printButton = scope.querySelector('[data-trigger-browser-print]');
+      if (printButton && printButton.dataset.bound !== 'true') {
+        printButton.dataset.bound = 'true';
+        printButton.addEventListener('click', function() {
+          window.print();
+        });
+      }
+    }
+
     function pulseMetrics() {
       root.querySelectorAll('.metric-block').forEach(function(node) {
         node.classList.remove('pulse');
         window.requestAnimationFrame(function() {
           node.classList.add('pulse');
         });
+      });
+    }
+
+    function bindGlobalEvents() {
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && state.isPrintModalOpen) {
+          state.isPrintModalOpen = false;
+          updatePrintModal();
+        }
       });
     }
 
