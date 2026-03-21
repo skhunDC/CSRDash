@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <script>
+      window.CSR_DASHBOARD_INITIAL_STATE = <?!= initialState ?>;
+      window.CSR_DASHBOARD_PRINT_MODE = true;
+    </script>
+    <?!= include('styles'); ?>
+  </head>
+  <body class="print-body">
+    <div id="print-app" class="print-shell"></div>
+    <?!= include('scripts'); ?>
+  </body>
+</html>

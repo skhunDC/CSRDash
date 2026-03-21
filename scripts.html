@@ -1,0 +1,467 @@
+<script>
+  (function() {
+    const state = {
+      auth: window.CSR_DASHBOARD_INITIAL_STATE.auth,
+      refreshIntervalMs: window.CSR_DASHBOARD_INITIAL_STATE.refreshIntervalMs,
+      logoUrl: window.CSR_DASHBOARD_INITIAL_STATE.logoUrl,
+      printUrl: window.CSR_DASHBOARD_INITIAL_STATE.printUrl,
+      data: null,
+      activeCompetitionTab: 'Conversions',
+      refreshTimer: null,
+      loading: false,
+      isPrintMode: Boolean(window.CSR_DASHBOARD_PRINT_MODE),
+    };
+
+    const root = document.getElementById(state.isPrintMode ? 'print-app' : 'app');
+
+    function boot() {
+      if (!state.auth || !state.auth.authorized) {
+        renderUnauthorized();
+        return;
+      }
+
+      renderLoading('Loading dashboard');
+      fetchDashboardData();
+      scheduleRefresh();
+    }
+
+    function scheduleRefresh() {
+      clearInterval(state.refreshTimer);
+      state.refreshTimer = setInterval(function() {
+        fetchDashboardData(true);
+      }, state.refreshIntervalMs || 60000);
+    }
+
+    function fetchDashboardData(isRefresh) {
+      state.loading = true;
+      google.script.run
+        .withSuccessHandler(function(payload) {
+          state.loading = false;
+          state.data = payload;
+          if (!payload.competitions.categories[state.activeCompetitionTab]) {
+            state.activeCompetitionTab = payload.competitions.tabs[0];
+          }
+          render(isRefresh);
+        })
+        .withFailureHandler(function(error) {
+          state.loading = false;
+          renderError(error && error.message ? error.message : 'Unable to load dashboard data.');
+        })
+        [isRefresh ? 'refreshDashboardData' : 'getInitialDashboardData']();
+    }
+
+    function updateTask(taskName, nextCompleted, assignedCsr) {
+      google.script.run
+        .withSuccessHandler(function(tasksPayload) {
+          state.data.tasks = tasksPayload;
+          render(true, taskName);
+        })
+        .withFailureHandler(function(error) {
+          renderError(error && error.message ? error.message : 'Unable to update task.');
+        })
+        .updateTaskStatus(taskName, nextCompleted, assignedCsr);
+    }
+
+    function seedData() {
+      google.script.run
+        .withSuccessHandler(function() {
+          fetchDashboardData(true);
+        })
+        .withFailureHandler(function(error) {
+          renderError(error && error.message ? error.message : 'Unable to seed sheet data.');
+        })
+        .seedDashboardData();
+    }
+
+    function render(isRefresh, changedTaskName) {
+      if (state.isPrintMode) {
+        renderPrint();
+        return;
+      }
+
+      root.innerHTML = `
+        <main class="dashboard ${isRefresh ? 'fade-swap' : ''}">
+          ${renderHero()}
+          ${renderPerformance()}
+          ${renderTasks(changedTaskName)}
+          ${renderSupportModules()}
+        </main>
+      `;
+
+      bindDashboardEvents();
+      if (isRefresh) {
+        pulseMetrics();
+      }
+    }
+
+    function renderHero() {
+      const hero = state.data.hero;
+      const deltaClass = hero.deltaPercent >= 0 ? 'delta-positive' : 'delta-negative';
+      return `
+        <section class="panel hero-panel">
+          <div>
+            <div class="brand-lockup">
+              <img class="brand-logo" src="${escapeHtml(state.logoUrl)}" alt="Dublin Cleaners logo">
+              <div>
+                <div class="eyebrow">Mounted TV Ops View</div>
+                <h1 class="brand-title">Dublin Cleaners<br>CSR Dashboard</h1>
+                <p class="brand-copy">A high-clarity operations board for sales momentum, CSR productivity, and live front-of-house task execution.</p>
+              </div>
+            </div>
+            <div class="hero-grid">
+              <div class="metric-block">
+                <div class="metric-label">${escapeHtml(hero.weekLabel)} sales</div>
+                <div class="metric-value">${formatCurrency(hero.currentYearSales)}</div>
+                <div class="metric-subtle">Current year</div>
+              </div>
+              <div class="metric-block">
+                <div class="metric-label">Last year</div>
+                <div class="metric-value">${formatCurrency(hero.lastYearSales)}</div>
+                <div class="metric-subtle">Same week comparison</div>
+              </div>
+              <div class="metric-block">
+                <div class="metric-label">Year-over-year</div>
+                <div class="metric-value ${deltaClass}">${formatPercent(hero.deltaPercent)}</div>
+                <div class="metric-subtle">Chain-wide performance delta</div>
+              </div>
+            </div>
+          </div>
+          <div class="hero-side">
+            <div>
+              <div class="section-head">
+                <div>
+                  <h2 class="section-title">Store comparison</h2>
+                  <div class="section-copy">Current week sales stacked against the same week last year.</div>
+                </div>
+                <span class="refresh-chip">Auto refresh every 60 sec</span>
+              </div>
+              <div class="store-list">
+                ${hero.stores.map(function(store) {
+                  return `
+                    <div class="store-row">
+                      <strong>${escapeHtml(store.store)}</strong>
+                      <span>${formatCurrency(store.currentYear)}</span>
+                      <span>${formatCurrency(store.lastYear)}</span>
+                      <span class="${store.deltaPercent >= 0 ? 'delta-positive' : 'delta-negative'}">${formatPercent(store.deltaPercent)}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+            <div class="hero-actions">
+              <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer">Open source sheet</a>
+              <button class="sheet-chip seed-action" data-action="seed">Reseed demo data</button>
+              ${state.printUrl ? `<a class="sheet-chip print-action" href="${escapeHtml(state.printUrl)}" target="_blank" rel="noopener noreferrer">Open print view</a>` : ''}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderPerformance() {
+      const performance = state.data.performance;
+      const topValue = performance.entries[0] ? performance.entries[0].dollarsPerHour : 0;
+
+      return `
+        <section class="panel performance-panel">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">CSR Performance</h2>
+              <div class="section-copy">Yesterday’s $/hour by CSR, ranked highest to lowest for quick coaching focus.</div>
+            </div>
+            <span class="refresh-chip">${escapeHtml(performance.dateLabel)}</span>
+          </div>
+          <div class="performance-list">
+            ${performance.entries.map(function(entry) {
+              const fill = topValue ? Math.round((entry.dollarsPerHour / topValue) * 100) : 0;
+              return `
+                <div class="performance-row">
+                  <span class="rank-badge ${escapeHtml(entry.tier)}">#${entry.rank}</span>
+                  <div class="performance-meta">
+                    <strong>${escapeHtml(entry.csr)}</strong>
+                    <div class="performance-bar" style="--fill:${fill}%"></div>
+                  </div>
+                  <span>${formatCurrency(entry.sales)}</span>
+                  <strong>${formatCurrency(entry.dollarsPerHour)}/hr</strong>
+                </div>
+              `;
+            }).join('') || '<div class="subtle-empty">Add rows to the CSR_Performance sheet for yesterday to populate this ranking.</div>'}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderTasks(changedTaskName) {
+      const tasks = state.data.tasks;
+      return `
+        <section class="panel tasks-panel">
+          <div class="tasks-side">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Today’s Tasks</h2>
+                <div class="section-copy">Primary focus area. Assign owners in Sheets, then confirm completion directly on the TV board.</div>
+              </div>
+            </div>
+            <div class="tasks-summary">
+              <div class="section-copy">Completion snapshot</div>
+              <div class="summary-grid">
+                <div>
+                  <div class="summary-label">Complete</div>
+                  <div class="summary-value">${tasks.summary.completed}</div>
+                </div>
+                <div>
+                  <div class="summary-label">Unassigned</div>
+                  <div class="summary-value">${tasks.summary.unassigned}</div>
+                </div>
+                <div>
+                  <div class="summary-label">Total</div>
+                  <div class="summary-value">${tasks.summary.total}</div>
+                </div>
+              </div>
+              <div class="summary-bar"><span style="--fill:${tasks.summary.progressPercent}%"></span></div>
+            </div>
+          </div>
+          <div class="task-list">
+            ${tasks.entries.map(function(entry) {
+              const changedClass = changedTaskName === entry.task ? 'changed' : '';
+              return `
+                <div class="task-row ${entry.completed ? 'completed' : ''} ${changedClass}">
+                  <div>
+                    <div class="task-name">${escapeHtml(entry.task)}</div>
+                    <div class="task-meta">${entry.updatedAt ? 'Updated ' + escapeHtml(entry.updatedAt) : 'Awaiting completion update'}</div>
+                  </div>
+                  <div>
+                    <div class="task-meta">Assigned CSR</div>
+                    <div>${escapeHtml(entry.assignedCsr || 'Unassigned')}</div>
+                  </div>
+                  <div class="task-status">
+                    <button class="status-pill ${entry.completed ? 'complete' : 'pending'}" data-task="${escapeAttribute(entry.task)}" data-assignee="${escapeAttribute(entry.assignedCsr || '')}" data-completed="${String(entry.completed)}">
+                      ${entry.completed ? 'Completed' : 'Mark done'}
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderSupportModules() {
+      const schedule = state.data.schedule;
+      const competitions = state.data.competitions;
+      const activeRows = competitions.categories[state.activeCompetitionTab] || [];
+      const employee = state.data.employeeOfWeek;
+      const imageHtml = employee.imageUrl
+        ? `<img class="employee-avatar" src="${escapeHtml(employee.imageUrl)}" alt="${escapeAttribute(employee.name)}">`
+        : `<div class="employee-avatar employee-fallback">${escapeHtml((employee.name || 'E').charAt(0).toUpperCase())}</div>`;
+
+      return `
+        <section class="panel support-panel">
+          <div class="module">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Schedule Snapshot</h2>
+                <div class="section-copy">Who is off today and tomorrow.</div>
+              </div>
+            </div>
+            <div class="schedule-days">
+              ${renderScheduleDay('Today', schedule.today.off)}
+              ${renderScheduleDay('Tomorrow', schedule.tomorrow.off)}
+            </div>
+          </div>
+          <div class="module">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Competition Module</h2>
+                <div class="section-copy">Sheet-driven tabs for key add-on contests and conversion pushes.</div>
+              </div>
+            </div>
+            <div class="tabs">
+              ${competitions.tabs.map(function(tab) {
+                return `<button class="tab-chip ${tab === state.activeCompetitionTab ? 'active' : ''}" data-tab="${escapeAttribute(tab)}">${escapeHtml(tab)}</button>`;
+              }).join('')}
+            </div>
+            <div class="competition-list">
+              ${activeRows.map(function(entry) {
+                return `
+                  <div class="competition-row">
+                    <div class="competition-meta">
+                      <strong>${escapeHtml(entry.csr)}</strong>
+                      <div class="competition-bar" style="--fill:${entry.progressPercent}%"></div>
+                      <div class="task-meta">${escapeHtml(entry.notes || 'No note')}</div>
+                    </div>
+                    <strong>${entry.value}/${entry.goal}</strong>
+                  </div>
+                `;
+              }).join('') || '<div class="subtle-empty">Add competition rows to the Competitions sheet for this tab.</div>'}
+            </div>
+          </div>
+          <div class="module">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Employee of the Week</h2>
+                <div class="section-copy">Recognition block powered directly from Google Sheets.</div>
+              </div>
+            </div>
+            <div class="employee-layout">
+              ${imageHtml}
+              <div>
+                <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
+                <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
+                ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderScheduleDay(label, items) {
+      return `
+        <div>
+          <div class="task-meta" style="margin-bottom:8px">${escapeHtml(label)}</div>
+          <div class="schedule-list">
+            ${items.length ? items.map(function(item) {
+              return `
+                <div class="schedule-row">
+                  <div>
+                    <strong>${escapeHtml(item.csr)}</strong>
+                    <div class="task-meta">${escapeHtml(item.notes || 'Off')}</div>
+                  </div>
+                  <span class="status-pill pending">OFF</span>
+                </div>
+              `;
+            }).join('') : '<div class="subtle-empty">No team members off.</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderUnauthorized() {
+      root.innerHTML = `
+        <section class="unauthorized">
+          <div class="unauthorized-panel">
+            <img class="brand-logo" src="${escapeHtml(state.logoUrl)}" alt="Dublin Cleaners logo">
+            <div class="eyebrow">Dublin Cleaners</div>
+            <h1 class="unauthorized-title">Unauthorized</h1>
+            <p class="unauthorized-copy">This CSR dashboard is only available to approved Google accounts. Sign in with an authorized browser session to continue.</p>
+            <p class="tiny">Signed in as: ${escapeHtml(state.auth && state.auth.email ? state.auth.email : 'Unknown user')}</p>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderLoading(message) {
+      root.innerHTML = `<div class="loading-state"><div><div class="eyebrow">Please wait</div><h1 class="section-title">${escapeHtml(message)}</h1></div></div>`;
+    }
+
+    function renderError(message) {
+      root.innerHTML = `
+        <div class="error-state">
+          <div class="unauthorized-panel">
+            <div class="eyebrow">Dashboard error</div>
+            <h1 class="unauthorized-title">Unable to load</h1>
+            <p class="unauthorized-copy">${escapeHtml(message)}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPrint() {
+      const tasks = state.data.tasks.entries;
+      root.innerHTML = `
+        <section class="print-layout ${state.loading ? '' : 'fade-swap'}">
+          <div class="print-card">
+            <img class="brand-logo" src="${escapeHtml(state.logoUrl)}" alt="Dublin Cleaners logo">
+            <div class="eyebrow">Printable operations view</div>
+            <h1 class="print-title">CSR Dashboard Summary</h1>
+            <p class="unauthorized-copy">Generated ${escapeHtml(new Date(state.data.generatedAt).toLocaleString())} from the Google Sheets data source.</p>
+          </div>
+          <div class="print-grid">
+            <div class="print-card">
+              <h2 class="section-title">Sales headline</h2>
+              <p>${formatCurrency(state.data.hero.currentYearSales)} vs ${formatCurrency(state.data.hero.lastYearSales)} (${formatPercent(state.data.hero.deltaPercent)})</p>
+            </div>
+            <div class="print-card">
+              <h2 class="section-title">Task progress</h2>
+              <p>${state.data.tasks.summary.completed}/${state.data.tasks.summary.total} complete · ${state.data.tasks.summary.unassigned} unassigned</p>
+            </div>
+          </div>
+          <div class="print-card">
+            <h2 class="section-title">Today’s Tasks</h2>
+            ${tasks.map(function(entry) {
+              return `
+                <div class="print-task">
+                  <span>${escapeHtml(entry.task)} — ${escapeHtml(entry.assignedCsr || 'Unassigned')}</span>
+                  <strong>${entry.completed ? 'Done' : 'Open'}</strong>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </section>
+      `;
+    }
+
+    function bindDashboardEvents() {
+      root.querySelectorAll('[data-task]').forEach(function(button) {
+        button.addEventListener('click', function() {
+          const taskName = button.getAttribute('data-task');
+          const assignedCsr = button.getAttribute('data-assignee') || '';
+          const completed = button.getAttribute('data-completed') === 'true';
+          updateTask(taskName, !completed, assignedCsr);
+        });
+      });
+
+      root.querySelectorAll('[data-tab]').forEach(function(button) {
+        button.addEventListener('click', function() {
+          state.activeCompetitionTab = button.getAttribute('data-tab');
+          render(true);
+        });
+      });
+
+      const seedButton = root.querySelector('[data-action="seed"]');
+      if (seedButton) {
+        seedButton.addEventListener('click', seedData);
+      }
+    }
+
+    function pulseMetrics() {
+      root.querySelectorAll('.metric-block').forEach(function(node) {
+        node.classList.remove('pulse');
+        window.requestAnimationFrame(function() {
+          node.classList.add('pulse');
+        });
+      });
+    }
+
+    function formatCurrency(value) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(Number(value) || 0);
+    }
+
+    function formatPercent(value) {
+      const normalized = Number(value) || 0;
+      const prefix = normalized > 0 ? '+' : '';
+      return prefix + normalized.toFixed(1) + '%';
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
+    boot();
+  })();
+</script>
