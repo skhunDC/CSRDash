@@ -631,11 +631,12 @@
 
   .employee-image-wrap {
     width: 100%;
-    height: clamp(220px, 25vh, 280px);
+    height: 100%;
+    min-height: 0;
     display: grid;
     place-items: center;
     justify-self: stretch;
-    align-self: end;
+    align-self: stretch;
     overflow: hidden;
     padding: 12px;
     border-radius: 24px;
@@ -656,11 +657,12 @@
 
   .employee-fallback {
     width: 100%;
-    height: clamp(220px, 25vh, 280px);
+    height: 100%;
+    min-height: 0;
     display: grid;
     place-items: center;
     justify-self: stretch;
-    align-self: end;
+    align-self: stretch;
     font-family: var(--font-display);
     font-size: clamp(2.4rem, 5vw, 4.2rem);
     border-radius: 24px;
