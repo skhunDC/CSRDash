@@ -600,22 +600,46 @@
 
   .loading-state,
   .error-state {
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     width: 100%;
     height: 100%;
     text-align: center;
   }
 
-  .loading-state::after {
-    content: '';
+  .loading-state {
+    gap: 10px;
+  }
+
+  .loading-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .loading-copy .eyebrow,
+  .loading-copy .section-title,
+  .loading-timer {
+    margin: 0;
+  }
+
+  .loading-timer {
+    color: var(--text-muted);
+    font-size: 0.94rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .loading-spinner {
     width: 68px;
     height: 68px;
     border-radius: 50%;
     border: 4px solid rgba(64, 214, 255, 0.16);
     border-top-color: var(--brand);
     animation: spin 900ms linear infinite;
-    margin-top: 18px;
   }
 
   .fade-swap {
