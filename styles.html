@@ -596,22 +596,32 @@
 
   .employee-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 46%);
+    gap: 20px;
+    align-items: center;
     min-height: 0;
   }
 
   .employee-copy {
     display: grid;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
   }
 
+  .employee-panel .section-title {
+    font-size: clamp(1.9rem, 2vw, 2.35rem);
+  }
+
+  .employee-panel .section-copy {
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
   .employee-image-wrap {
-    width: min(100%, 220px);
+    width: min(100%, 440px);
     aspect-ratio: 1 / 1;
-    justify-self: center;
+    justify-self: end;
+    align-self: center;
     overflow: hidden;
     border-radius: 28px;
     border: 1px solid rgba(145, 207, 255, 0.18);
@@ -629,34 +639,42 @@
   }
 
   .employee-fallback {
-    width: min(100%, 220px);
+    width: min(100%, 440px);
     aspect-ratio: 1 / 1;
     display: grid;
     place-items: center;
-    justify-self: center;
+    justify-self: end;
+    align-self: center;
     font-family: var(--font-display);
-    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-size: clamp(2.4rem, 5vw, 4.2rem);
     border-radius: 28px;
   }
 
   .employee-name {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: clamp(1.9rem, 2.3vw, 2.35rem);
+    line-height: 1.05;
   }
 
   .employee-quote {
     margin: 0;
     color: var(--text-muted);
-    line-height: 1.5;
+    font-size: 1.08rem;
+    line-height: 1.7;
   }
 
   .employee-quote-meta {
     margin-top: 10px;
     color: var(--text-soft);
-    font-size: 0.76rem;
+    font-size: 0.84rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     line-height: 1.4;
+  }
+
+  .employee-panel .employee-highlight {
+    font-size: 0.92rem;
+    padding: 10px 14px;
   }
 
   .employee-quote-meta a {
