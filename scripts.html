@@ -8,6 +8,9 @@
       data: null,
       activeCompetitionTab: 'Conversions',
       refreshTimer: null,
+      competitionRotationTimer: null,
+      competitionRotationIntervalMs: 60000,
+      cachedCompetitions: null,
       loading: false,
       loadingStartedAt: 0,
       loadingTicker: null,
@@ -24,6 +27,7 @@
 
       fetchDashboardData();
       scheduleRefresh();
+      scheduleCompetitionRotation();
     }
 
     function scheduleRefresh() {
@@ -42,6 +46,7 @@
         .withSuccessHandler(function(payload) {
           stopLoading();
           state.data = payload;
+          state.cachedCompetitions = payload.competitions;
           if (!payload.competitions.categories[state.activeCompetitionTab]) {
             state.activeCompetitionTab = payload.competitions.tabs[0];
           }
@@ -49,6 +54,10 @@
         })
         .withFailureHandler(function(error) {
           stopLoading();
+          if (state.data) {
+            render(isRefresh);
+            return;
+          }
           renderError(error && error.message ? error.message : 'Unable to load dashboard data.');
         })
         [isRefresh ? 'refreshDashboardData' : 'getInitialDashboardData']();
@@ -58,7 +67,7 @@
       google.script.run
         .withSuccessHandler(function(tasksPayload) {
           state.data.tasks = tasksPayload;
-          render(true, taskName);
+          updateTasksPanel(taskName);
         })
         .withFailureHandler(function(error) {
           renderError(error && error.message ? error.message : 'Unable to update task.');
@@ -66,6 +75,23 @@
         .updateTaskStatus(taskName, nextCompleted, assignedCsr);
     }
 
+    function scheduleCompetitionRotation() {
+      clearInterval(state.competitionRotationTimer);
+      state.competitionRotationTimer = setInterval(function() {
+        rotateCompetitionTab();
+      }, state.competitionRotationIntervalMs);
+    }
+
+    function rotateCompetitionTab() {
+      const competitions = state.cachedCompetitions || (state.data && state.data.competitions);
+      if (!competitions || !competitions.tabs || competitions.tabs.length < 2) {
+        return;
+      }
+
+      const currentIndex = Math.max(competitions.tabs.indexOf(state.activeCompetitionTab), 0);
+      state.activeCompetitionTab = competitions.tabs[(currentIndex + 1) % competitions.tabs.length];
+      updateCompetitionModule(true);
+    }
 
     function render(isRefresh, changedTaskName) {
       if (state.isPrintMode) {
@@ -73,26 +99,86 @@
         return;
       }
 
-      root.innerHTML = `
-        <main class="dashboard ${isRefresh ? 'fade-swap' : ''}">
-          ${renderHero()}
-          ${renderPerformance()}
-          ${renderTasks(changedTaskName)}
-          ${renderSupportModules()}
-        </main>
-      `;
+      if (!root.querySelector('.dashboard')) {
+        renderDashboardShell();
+      }
 
-      bindDashboardEvents();
+      updateHeroPanel();
+      updatePerformancePanel();
+      updateTasksPanel(changedTaskName);
+      updateSupportModules();
+
       if (isRefresh) {
         pulseMetrics();
       }
+    }
+
+    function renderDashboardShell() {
+      root.innerHTML = `
+        <main class="dashboard">
+          <section class="panel hero-panel" data-panel="hero"></section>
+          <section class="panel performance-panel" data-panel="performance"></section>
+          <section class="panel tasks-panel" data-panel="tasks"></section>
+          <section class="panel support-panel" data-panel="support"></section>
+        </main>
+      `;
+    }
+
+    function updateHeroPanel() {
+      const panel = root.querySelector('[data-panel="hero"]');
+      if (!panel) {
+        return;
+      }
+      panel.innerHTML = renderHero();
+    }
+
+    function updatePerformancePanel() {
+      const panel = root.querySelector('[data-panel="performance"]');
+      if (!panel) {
+        return;
+      }
+      panel.innerHTML = renderPerformance();
+    }
+
+    function updateTasksPanel(changedTaskName) {
+      const panel = root.querySelector('[data-panel="tasks"]');
+      if (!panel) {
+        return;
+      }
+      panel.innerHTML = renderTasks(changedTaskName);
+      bindTaskEvents(panel);
+    }
+
+    function updateSupportModules() {
+      const panel = root.querySelector('[data-panel="support"]');
+      if (!panel) {
+        return;
+      }
+      panel.innerHTML = renderSupportModules();
+      bindCompetitionEvents(panel);
+    }
+
+    function updateCompetitionModule(animate) {
+      const shell = root.querySelector('[data-competition-module]');
+      if (!shell) {
+        updateSupportModules();
+        return;
+      }
+
+      shell.innerHTML = renderCompetitionModule();
+      if (animate) {
+        shell.classList.remove('competition-module-animate');
+        window.requestAnimationFrame(function() {
+          shell.classList.add('competition-module-animate');
+        });
+      }
+      bindCompetitionEvents(shell);
     }
 
     function renderHero() {
       const hero = state.data.hero;
       const deltaClass = hero.deltaPercent >= 0 ? 'delta-positive' : 'delta-negative';
       return `
-        <section class="panel hero-panel">
           <div>
             <div class="brand-lockup">
               <img class="brand-logo" src="${escapeHtml(state.logoUrl)}" alt="Dublin Cleaners logo">
@@ -147,7 +233,6 @@
               ${state.printUrl ? `<a class="sheet-chip print-action" href="${escapeHtml(state.printUrl)}" target="_blank" rel="noopener noreferrer">Open print view</a>` : ''}
             </div>
           </div>
-        </section>
       `;
     }
 
@@ -156,7 +241,6 @@
       const topValue = performance.entries[0] ? performance.entries[0].dollarsPerHour : 0;
 
       return `
-        <section class="panel performance-panel">
           <div class="section-head">
             <div>
               <h2 class="section-title">CSR Performance</h2>
@@ -180,14 +264,12 @@
               `;
             }).join('') || '<div class="subtle-empty">Add rows to the CSR_Performance sheet for yesterday to populate this ranking.</div>'}
           </div>
-        </section>
       `;
     }
 
     function renderTasks(changedTaskName) {
       const tasks = state.data.tasks;
       return `
-        <section class="panel tasks-panel">
           <div class="tasks-side">
             <div class="section-head">
               <div>
@@ -236,77 +318,82 @@
               `;
             }).join('')}
           </div>
-        </section>
       `;
     }
 
     function renderSupportModules() {
       const schedule = state.data.schedule;
-      const competitions = state.data.competitions;
-      const activeRows = competitions.categories[state.activeCompetitionTab] || [];
       const employee = state.data.employeeOfWeek;
       const imageHtml = employee.imageUrl
         ? `<img class="employee-avatar" src="${escapeHtml(employee.imageUrl)}" alt="${escapeAttribute(employee.name)}">`
         : `<div class="employee-avatar employee-fallback">${escapeHtml((employee.name || 'E').charAt(0).toUpperCase())}</div>`;
 
       return `
-        <section class="panel support-panel">
-          <div class="module">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">Schedule Snapshot</h2>
-                <div class="section-copy">Who is off today and tomorrow.</div>
-              </div>
-            </div>
-            <div class="schedule-days">
-              ${renderScheduleDay('Today', schedule.today.off)}
-              ${renderScheduleDay('Tomorrow', schedule.tomorrow.off)}
+        <div class="module">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">Schedule Snapshot</h2>
+              <div class="section-copy">Who is off today and tomorrow.</div>
             </div>
           </div>
-          <div class="module">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">Competition Module</h2>
-                <div class="section-copy">Sheet-driven tabs for key add-on contests and conversion pushes.</div>
-              </div>
-            </div>
-            <div class="tabs">
-              ${competitions.tabs.map(function(tab) {
-                return `<button class="tab-chip ${tab === state.activeCompetitionTab ? 'active' : ''}" data-tab="${escapeAttribute(tab)}">${escapeHtml(tab)}</button>`;
-              }).join('')}
-            </div>
-            <div class="competition-list">
-              ${activeRows.map(function(entry) {
-                return `
-                  <div class="competition-row">
-                    <div class="competition-meta">
-                      <strong>${escapeHtml(entry.csr)}</strong>
-                      <div class="competition-bar" style="--fill:${entry.progressPercent}%"></div>
-                      <div class="task-meta">${escapeHtml(entry.notes || 'No note')}</div>
-                    </div>
-                    <strong>${entry.value}/${entry.goal}</strong>
-                  </div>
-                `;
-              }).join('') || '<div class="subtle-empty">Add competition rows to the Competitions sheet for this tab.</div>'}
+          <div class="schedule-days">
+            ${renderScheduleDay('Today', schedule.today.off)}
+            ${renderScheduleDay('Tomorrow', schedule.tomorrow.off)}
+          </div>
+        </div>
+        <div class="module" data-competition-module>
+          ${renderCompetitionModule()}
+        </div>
+        <div class="module">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">Employee of the Week</h2>
+              <div class="section-copy">Recognition block powered directly from Google Sheets.</div>
             </div>
           </div>
-          <div class="module">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">Employee of the Week</h2>
-                <div class="section-copy">Recognition block powered directly from Google Sheets.</div>
-              </div>
-            </div>
-            <div class="employee-layout">
-              ${imageHtml}
-              <div>
-                <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
-                <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
-                ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
-              </div>
+          <div class="employee-layout">
+            ${imageHtml}
+            <div>
+              <h3 class="employee-name">${escapeHtml(employee.name)}</h3>
+              <p class="employee-quote">“${escapeHtml(employee.quote)}”</p>
+              ${employee.highlight ? `<span class="employee-highlight">${escapeHtml(employee.highlight)}</span>` : ''}
             </div>
           </div>
-        </section>
+        </div>
+      `;
+    }
+
+    function renderCompetitionModule() {
+      const competitions = state.cachedCompetitions || state.data.competitions;
+      const activeRows = competitions.categories[state.activeCompetitionTab] || [];
+
+      return `
+        <div class="section-head competition-head">
+          <div>
+            <h2 class="section-title">Competition Module</h2>
+            <div class="section-copy">Sheet-driven tabs for key add-on contests and conversion pushes.</div>
+          </div>
+          <span class="refresh-chip">Rotates every 60 sec</span>
+        </div>
+        <div class="tabs competition-tabs" role="tablist" aria-label="Competition categories">
+          ${competitions.tabs.map(function(tab) {
+            return `<button class="tab-chip competition-tab-chip competition-tab-${slugify(tab)} ${tab === state.activeCompetitionTab ? 'active' : ''}" data-tab="${escapeAttribute(tab)}" aria-pressed="${String(tab === state.activeCompetitionTab)}">${escapeHtml(tab)}</button>`;
+          }).join('')}
+        </div>
+        <div class="competition-list">
+          ${activeRows.map(function(entry) {
+            return `
+              <div class="competition-row">
+                <div class="competition-meta">
+                  <strong>${escapeHtml(entry.csr)}</strong>
+                  <div class="competition-bar" style="--fill:${entry.progressPercent}%"></div>
+                  <div class="task-meta">${escapeHtml(entry.notes || 'No note')}</div>
+                </div>
+                <strong>${entry.value}/${entry.goal}</strong>
+              </div>
+            `;
+          }).join('') || '<div class="subtle-empty">Add competition rows to the Competitions sheet for this tab.</div>'}
+        </div>
       `;
     }
 
@@ -430,8 +517,8 @@
       `;
     }
 
-    function bindDashboardEvents() {
-      root.querySelectorAll('[data-task]').forEach(function(button) {
+    function bindTaskEvents(scope) {
+      scope.querySelectorAll('[data-task]').forEach(function(button) {
         button.addEventListener('click', function() {
           const taskName = button.getAttribute('data-task');
           const assignedCsr = button.getAttribute('data-assignee') || '';
@@ -439,11 +526,13 @@
           updateTask(taskName, !completed, assignedCsr);
         });
       });
+    }
 
-      root.querySelectorAll('[data-tab]').forEach(function(button) {
+    function bindCompetitionEvents(scope) {
+      scope.querySelectorAll('[data-tab]').forEach(function(button) {
         button.addEventListener('click', function() {
           state.activeCompetitionTab = button.getAttribute('data-tab');
-          render(true);
+          updateCompetitionModule(true);
         });
       });
     }
@@ -486,6 +575,13 @@
 
     function escapeAttribute(value) {
       return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
+    function slugify(value) {
+      return String(value == null ? '' : value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'tab';
     }
 
     boot();
