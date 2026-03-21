@@ -45,13 +45,14 @@ Because Google Apps Script identity behavior varies by Workspace/domain policy, 
 The app stores data in a spreadsheet named **CSR Dashboard Data**. The spreadsheet is created automatically if it does not already exist. Its ID is persisted in Script Properties under `CSR_DASHBOARD_SPREADSHEET_ID`.
 
 ### Auto-created sheets
-If missing, the app creates and seeds these sheets:
+If missing, the app creates these sheets:
 - `Sales`
 - `CSR_Performance`
 - `Tasks`
 - `Schedule`
 - `Competitions`
 - `Employee_Of_Week`
+- `Employees`
 
 ### Sheet schemas
 #### Sales
@@ -104,6 +105,11 @@ If missing, the app creates and seeds these sheets:
 | Image URL | Optional image |
 | Highlight | Supporting recognition copy |
 
+#### Employees
+| Column | Purpose |
+| --- | --- |
+| CSR | Active CSR roster name |
+
 ## Application files
 - `Code.gs`: server-side Apps Script logic, authorization, sheet setup, and data shaping
 - `index.html`: main TV dashboard container
@@ -119,13 +125,13 @@ If missing, the app creates and seeds these sheets:
 4. Use **Execute as: User accessing the web app**.
 5. Restrict access to the intended user group in the deployment settings.
 6. Open the deployed app once as an authorized user to let the spreadsheet auto-create.
-7. Edit the generated spreadsheet to replace seeded sample data with live operational data.
+7. Populate the generated spreadsheet with live operational data before using the dashboard in production.
 
 ## Usage notes
 - The dashboard refreshes every 60 seconds automatically.
 - Task owners are edited in Google Sheets.
 - Task completion can be toggled on the dashboard and is persisted back to Sheets.
-- The “Reseed demo data” action can restore the default seeded rows for demonstrations.
+- The `Employees` sheet is prefilled with the active CSR roster for Regina, Shelly, Nellie, Demetria, Dipali, Heather, Lynn, Lisa, Angela, Karmen, Omar, Kaylee, Ingrid, Kelly, Brandy, and Cheyenne.
 - The printable summary view is exposed from the same web app deployment.
 
 ## Testing approach
@@ -146,7 +152,7 @@ npm test
 
 ## Assumptions and implementation decisions
 - The app uses Google Sheets as the only persistence layer to keep editing simple for operations staff.
-- Sample data is seeded automatically for first-run usability and easier QA.
+- Sales, schedule, competition, performance, and employee-recognition sheets are created with headers only so live data can be entered directly.
 - The web app is optimized for TV display first, not for editing-intensive mobile workflows.
 - The print view is intentionally simplified for managers who need a quick paper-friendly task summary.
 - The app uses progressive enhancement in the browser, but all sensitive authorization decisions remain on the server.

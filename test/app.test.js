@@ -51,6 +51,7 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
     'Schedule',
     'Competitions',
     'Employee_Of_Week',
+    'Employees',
     'Front Counter',
     'Phones',
     'Counter Bags',
@@ -65,6 +66,22 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
     'Vacuum',
     'Trash',
     '# of Carts',
+    'Regina',
+    'Shelly',
+    'Nellie',
+    'Demetria',
+    'Dipali',
+    'Heather',
+    'Lynn',
+    'Lisa',
+    'Angela',
+    'Karmen',
+    'Omar',
+    'Kaylee',
+    'Ingrid',
+    'Kelly',
+    'Brandy',
+    'Cheyenne',
   ].forEach((value) => assert.match(code, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
 
   assert.match(code, /Session\.getActiveUser\(\)\.getEmail\(\)/);
@@ -85,4 +102,6 @@ test('client HTML includes auth-aware shell, refresh handling, and print mode', 
   assert.match(scriptsHtml, /Competition Module/);
   assert.match(scriptsHtml, /data-loading-timer/);
   assert.match(scriptsHtml, /formatLoadingDuration/);
+  assert.doesNotMatch(scriptsHtml, /Reseed demo data/);
+  assert.doesNotMatch(read('Code.gs'), /seedDashboardData/);
 });
