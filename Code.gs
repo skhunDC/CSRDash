@@ -2,8 +2,9 @@ const APP_CONFIG = Object.freeze({
   spreadsheetName: 'CSR Dashboard Data',
   allowedUsers: Object.freeze([
     'skhun@dublincleaners.com',
-    'skhun1@dublincleaners.com',
     'ss.sku@gmail.com',
+   'brianmbutler77@gmail.com',
+   'rbrown5940@gmail.com',
   ]),
   refreshIntervalMs: 60 * 1000,
   quoteCacheKeyPrefix: 'CSR_DAILY_SERVICE_QUOTE_',
