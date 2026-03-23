@@ -16,31 +16,25 @@ The visual system uses:
 - large display typography for fast readability
 - high-contrast color accents for status recognition
 - light animation for refreshes and task changes without becoming distracting
-- Dublin Cleaners branding and logo placement in the main hero and unauthorized state
+- Dublin Cleaners branding and logo placement in the main hero and fallback error states
 
 ## Authentication and authorization
-### Authentication flow
-This app uses the most reliable built-in pattern available for Google Apps Script HTMLService web apps:
-- deploy the web app as **Execute as: User accessing the web app**
-- restrict deployment access appropriately in Apps Script
-- use `Session.getActiveUser().getEmail()` server-side to identify the signed-in Google account
-- authorize requests only if the email matches the approved allowlist
+### Dashboard access flow
+The dashboard itself is now intentionally public:
+- deploy the web app as **Execute as: Me / USER_DEPLOYING**
+- publish it with `access: ANYONE`
+- let server-side Apps Script methods read and update the dashboard spreadsheet on behalf of the deployment owner
+- do not require a Google sign-in just to load the TV dashboard or refresh its data
 
-### Allowed users
-- `skhun@dublincleaners.com`
-- `ss.sku@gmail.com`
-- `brianmbutler77@gmail.com`
-- `rbrown5940@gmail.com`
-
-### Authorization behavior
-- The allowlist is enforced on the server in `Code.gs`
-- Unauthorized users never receive dashboard data from server-side methods
-- The initial HTML template receives only an authorization state object
-- Unauthorized users see a branded Unauthorized screen instead of the app
-- Task update actions and refresh actions also re-check authorization server-side
+### Source sheet access behavior
+The **Open source sheet** link still uses Google's normal spreadsheet access controls:
+- clicking it sends the browser to the Google Sheets URL for the backing file
+- Google will prompt for sign-in if the visitor is not already authenticated
+- the sheet only opens for accounts the file owner has explicitly granted access to
+- users without permission will see Google's standard access-denied/request-access flow
 
 ### Important deployment note
-Because Google Apps Script identity behavior varies by Workspace/domain policy, the deployment should be configured and tested with the final target accounts. The manifest is set to `executeAs: USER_ACCESSING` and `access: ANYONE` so both the two Dublin Cleaners accounts and the approved Gmail account can reach the sign-in boundary, while the server-side allowlist remains the real access control.
+Because the dashboard is public, anyone with the web app URL can view the board and use dashboard actions. The manifest is set to `executeAs: USER_DEPLOYING` and `access: ANYONE` so the mounted TV can load without authentication, while the separate Google Sheets link still respects the spreadsheet's own sharing permissions.
 
 ## Google Sheets data model
 The app stores data in a spreadsheet named **CSR Dashboard Data**. The spreadsheet is created automatically if it does not already exist. Its ID is persisted in Script Properties under `CSR_DASHBOARD_SPREADSHEET_ID`.
@@ -112,7 +106,7 @@ If missing, the app creates these sheets:
 | CSR | Active CSR roster name |
 
 ## Application files
-- `Code.gs`: server-side Apps Script logic, authorization, sheet setup, data shaping, and cached daily quote API integration
+- `Code.gs`: server-side Apps Script logic, public dashboard data access, sheet setup, data shaping, and cached daily quote API integration
 - `index.html`: main TV dashboard container
 - `styles.html`: shared visual system and layout styles
 - `scripts.html`: client-side rendering, refresh, and interactions
@@ -123,9 +117,9 @@ If missing, the app creates these sheets:
 1. Create or open the Apps Script project.
 2. Copy these files into the project root.
 3. Deploy as a web app.
-4. Use **Execute as: User accessing the web app**.
-5. Restrict access to the intended user group in the deployment settings.
-6. Open the deployed app once as an authorized user to let the spreadsheet auto-create.
+4. Use **Execute as: Me** so the public dashboard can load with the deployment owner's spreadsheet access.
+5. Set deployment access to **Anyone** for the dashboard URL, and control spreadsheet editing/viewing separately through Google Sheets sharing.
+6. Open the deployed app once after deployment to let the spreadsheet auto-create.
 7. Populate the generated spreadsheet with live operational data before using the dashboard in production.
 
 ## Usage notes
@@ -134,15 +128,16 @@ If missing, the app creates these sheets:
 - Task completion can be toggled on the dashboard and is persisted back to Sheets.
 - The `Employees` sheet is prefilled with the active CSR roster for Regina, Shelly, Nellie, Demetria, Dipali, Heather, Lynn, Lisa, Angela, Karmen, Omar, Kaylee, Ingrid, Kelly, Brandy, and Cheyenne.
 - The printable summary view is exposed from the same web app deployment.
+- The **Open source sheet** link intentionally hands off to Google Sheets, which will prompt for sign-in and enforce the file owner's sharing permissions.
 
 ## Testing approach
 The `test` directory contains a lightweight Node-based validation suite focused on static and structural checks for this repository.
 
 It verifies:
 - required project files exist
-- the Apps Script manifest contains the expected web app settings and scopes
-- `Code.gs` includes required allowlisted users, sheet names, and task labels
-- HTML partials include key rendering hooks for authentication, auto-refresh, and task interactions
+- the Apps Script manifest contains the expected public web app settings and scopes
+- `Code.gs` includes required public-access, sheet, and task configuration
+- HTML partials include key rendering hooks for auto-refresh, sheet access messaging, and task interactions
 
 ### Run tests
 ```bash
@@ -156,7 +151,7 @@ npm test
 - Sales, schedule, competition, performance, and employee-recognition sheets are created with headers only so live data can be entered directly.
 - The web app is optimized for TV display first, not for editing-intensive mobile workflows.
 - The print workflow is intentionally simplified into an in-dashboard modal so managers can open, review, and print a paper-friendly task summary without leaving the main screen.
-- The app uses progressive enhancement in the browser, but all sensitive authorization decisions remain on the server.
+- The app uses progressive enhancement in the browser, while the linked Google Sheet continues to rely on Google-managed authentication and file permissions.
 
 ## Daily service quote behavior
 - The Employee of the Week panel now requests one quote per day from a free quote API on the server side.

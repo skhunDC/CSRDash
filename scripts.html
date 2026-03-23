@@ -1,7 +1,7 @@
 <script>
   (function() {
     const state = {
-      auth: window.CSR_DASHBOARD_INITIAL_STATE.auth,
+      access: window.CSR_DASHBOARD_INITIAL_STATE.access || {},
       refreshIntervalMs: window.CSR_DASHBOARD_INITIAL_STATE.refreshIntervalMs,
       logoUrl: window.CSR_DASHBOARD_INITIAL_STATE.logoUrl,
       printUrl: window.CSR_DASHBOARD_INITIAL_STATE.printUrl,
@@ -40,11 +40,6 @@
 
 
     function boot() {
-      if (!state.auth || !state.auth.authorized) {
-        renderUnauthorized();
-        return;
-      }
-
       bindGlobalEvents();
       fetchDashboardData();
       scheduleRefresh();
@@ -273,9 +268,10 @@
               </div>
             </div>
             <div class="hero-actions">
-              <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer">Open source sheet</a>
+              <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer" title="Google may prompt for sign-in and will only open the sheet for accounts the owner has permissioned.">Open source sheet</a>
               <button class="sheet-chip print-action" type="button" data-open-print-modal>Open print view</button>
             </div>
+            <p class="task-meta">Dashboard access is public. Opening the source sheet still uses Google's normal sign-in and file permission checks.</p>
           </div>
       `;
     }
@@ -477,9 +473,9 @@
           <div class="unauthorized-panel">
             <img class="brand-logo" src="${escapeHtml(state.logoUrl)}" alt="Dublin Cleaners logo">
             <div class="eyebrow">Dublin Cleaners</div>
-            <h1 class="unauthorized-title">Unauthorized</h1>
-            <p class="unauthorized-copy">This CSR dashboard is only available to approved Google accounts. Sign in with an authorized browser session to continue.</p>
-            <p class="tiny">Signed in as: ${escapeHtml(state.auth && state.auth.email ? state.auth.email : 'Unknown user')}</p>
+            <h1 class="unauthorized-title">Access changed</h1>
+            <p class="unauthorized-copy">This screen is no longer used for normal dashboard entry because the dashboard now loads publicly.</p>
+            <p class="tiny">Opening the source sheet still follows Google's normal sign-in and file permission checks.</p>
           </div>
         </section>
       `;

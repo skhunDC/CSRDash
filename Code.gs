@@ -1,11 +1,5 @@
 const APP_CONFIG = Object.freeze({
   spreadsheetName: 'CSR Dashboard Data',
-  allowedUsers: Object.freeze([
-    'skhun@dublincleaners.com',
-    'ss.sku@gmail.com',
-    'brianmbutler77@gmail.com',
-    'rbrown5940@gmail.com',
-  ]),
   refreshIntervalMs: 60 * 1000,
   quoteCacheKeyPrefix: 'CSR_DAILY_SERVICE_QUOTE_',
   serviceQuoteApis: Object.freeze([
@@ -74,14 +68,8 @@ function doGet(e) {
   }
 
   const template = HtmlService.createTemplateFromFile('index');
-  const auth = getAuthorizationState_();
 
-  template.initialState = JSON.stringify({
-    auth,
-    refreshIntervalMs: APP_CONFIG.refreshIntervalMs,
-    logoUrl: APP_CONFIG.logoUrl,
-    printUrl: buildAppUrl_('print'),
-  });
+  template.initialState = JSON.stringify(getInitialState_(buildAppUrl_('print')));
 
   return template
     .evaluate()
@@ -92,13 +80,8 @@ function doGet(e) {
 
 function doGetPrint() {
   const template = HtmlService.createTemplateFromFile('print');
-  const auth = getAuthorizationState_();
 
-  template.initialState = JSON.stringify({
-    auth,
-    refreshIntervalMs: APP_CONFIG.refreshIntervalMs,
-    logoUrl: APP_CONFIG.logoUrl,
-  });
+  template.initialState = JSON.stringify(getInitialState_());
 
   return template
     .evaluate()
@@ -112,17 +95,14 @@ function include(filename) {
 }
 
 function getInitialDashboardData() {
-  authorizeRequest_();
   return getDashboardData_();
 }
 
 function refreshDashboardData() {
-  authorizeRequest_();
   return getDashboardData_();
 }
 
 function updateTaskStatus(taskName, completed, assignedCsr) {
-  authorizeRequest_();
   if (!taskName) {
     throw new Error('Task name is required.');
   }
@@ -145,6 +125,18 @@ function updateTaskStatus(taskName, completed, assignedCsr) {
 }
 
 
+function getInitialState_(printUrl) {
+  return {
+    access: {
+      dashboard: 'public',
+      sourceSheet: 'google-oauth',
+    },
+    refreshIntervalMs: APP_CONFIG.refreshIntervalMs,
+    logoUrl: APP_CONFIG.logoUrl,
+    printUrl: printUrl || '',
+  };
+}
+
 function getDashboardData_() {
   const spreadsheet = getOrCreateSpreadsheet_();
   ensureAllSheets_(spreadsheet, false);
@@ -160,24 +152,6 @@ function getDashboardData_() {
     competitions: getCompetitionData_(),
     employeeOfWeek: getEmployeeOfWeek_(),
   };
-}
-
-function getAuthorizationState_() {
-  const email = normalizeEmail_(Session.getActiveUser().getEmail());
-  const authorized = email && APP_CONFIG.allowedUsers.indexOf(email) !== -1;
-
-  return {
-    email: email || '',
-    authorized,
-    allowedUsers: APP_CONFIG.allowedUsers.slice(),
-  };
-}
-
-function authorizeRequest_() {
-  const auth = getAuthorizationState_();
-  if (!auth.authorized) {
-    throw new Error('Unauthorized');
-  }
 }
 
 function getOrCreateSpreadsheet_() {
