@@ -43,8 +43,9 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
 
   [
     'skhun@dublincleaners.com',
-    'skhun1@dublincleaners.com',
     'ss.sku@gmail.com',
+    'brianmbutler77@gmail.com',
+    'rbrown5940@gmail.com',
     'Sales',
     'CSR_Performance',
     'Tasks',
