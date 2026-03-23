@@ -3,8 +3,8 @@ const APP_CONFIG = Object.freeze({
   allowedUsers: Object.freeze([
     'skhun@dublincleaners.com',
     'ss.sku@gmail.com',
-   'brianmbutler77@gmail.com',
-   'rbrown5940@gmail.com',
+    'brianmbutler77@gmail.com',
+    'rbrown5940@gmail.com',
   ]),
   refreshIntervalMs: 60 * 1000,
   quoteCacheKeyPrefix: 'CSR_DAILY_SERVICE_QUOTE_',
