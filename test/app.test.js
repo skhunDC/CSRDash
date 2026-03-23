@@ -24,28 +24,25 @@ test('required project files exist', () => {
   });
 });
 
-test('manifest configures the app as a user-accessed web app with required scopes', () => {
+test('manifest configures the app as a public web app with required scopes', () => {
   const manifest = JSON.parse(read('appsscript.json'));
   assert.equal(manifest.runtimeVersion, 'V8');
-  assert.equal(manifest.webapp.executeAs, 'USER_ACCESSING');
+  assert.equal(manifest.webapp.executeAs, 'USER_DEPLOYING');
   assert.equal(manifest.webapp.access, 'ANYONE');
 
   const scopes = manifest.oauthScopes || [];
   [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/userinfo.email',
   ].forEach((scope) => assert.ok(scopes.includes(scope), `missing scope ${scope}`));
 });
 
-test('Code.gs includes required authorized users, sheet names, and task labels', () => {
+test('Code.gs includes required public access settings, sheet names, and task labels', () => {
   const code = read('Code.gs');
 
   [
-    'skhun@dublincleaners.com',
-    'ss.sku@gmail.com',
-    'brianmbutler77@gmail.com',
-    'rbrown5940@gmail.com',
+    'public',
+    'google-oauth',
     'Sales',
     'CSR_Performance',
     'Tasks',
@@ -85,7 +82,8 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
     'Cheyenne',
   ].forEach((value) => assert.match(code, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
 
-  assert.match(code, /Session\.getActiveUser\(\)\.getEmail\(\)/);
+  assert.doesNotMatch(code, /Session\.getActiveUser\(\)\.getEmail\(\)/);
+  assert.match(code, /getInitialState_/);
   assert.match(code, /updateTaskStatus/);
   assert.match(code, /ensureAllSheets_/);
   assert.match(code, /getDailyServiceQuote_/);
@@ -95,7 +93,7 @@ test('Code.gs includes required authorized users, sheet names, and task labels',
   assert.match(code, /UrlFetchApp\.fetch/);
 });
 
-test('client HTML includes auth-aware shell, refresh handling, print mode, and fitted no-scroll tasks panel behavior', () => {
+test('client HTML includes public shell, refresh handling, print mode, and fitted no-scroll tasks panel behavior', () => {
   const indexHtml = read('index.html');
   const scriptsHtml = read('scripts.html');
   const printHtml = read('print.html');
@@ -104,6 +102,7 @@ test('client HTML includes auth-aware shell, refresh handling, print mode, and f
   assert.match(indexHtml, /CSR_DASHBOARD_INITIAL_STATE/);
   assert.match(printHtml, /CSR_DASHBOARD_PRINT_MODE = true/);
   assert.match(scriptsHtml, /setInterval/);
+  assert.doesNotMatch(scriptsHtml, /state\.auth/);
   assert.match(scriptsHtml, /renderUnauthorized/);
   assert.match(scriptsHtml, /updateTask\(/);
   assert.match(scriptsHtml, /Competition Module/);
@@ -116,6 +115,8 @@ test('client HTML includes auth-aware shell, refresh handling, print mode, and f
   assert.match(scriptsHtml, /data-loading-timer/);
   assert.match(scriptsHtml, /formatLoadingDuration/);
   assert.match(scriptsHtml, /data-open-print-modal/);
+  assert.match(scriptsHtml, /Dashboard access is public/);
+  assert.match(scriptsHtml, /Google's normal sign-in and file permission checks/);
   assert.match(scriptsHtml, /renderPrintModal/);
   assert.match(scriptsHtml, /window\.print\(\)/);
   assert.match(scriptsHtml, /fitTasksPanel\(/);
