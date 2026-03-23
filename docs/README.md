@@ -28,8 +28,9 @@ This app uses the most reliable built-in pattern available for Google Apps Scrip
 
 ### Allowed users
 - `skhun@dublincleaners.com`
-- `skhun1@dublincleaners.com`
 - `ss.sku@gmail.com`
+- `brianmbutler77@gmail.com`
+- `rbrown5940@gmail.com`
 
 ### Authorization behavior
 - The allowlist is enforced on the server in `Code.gs`
