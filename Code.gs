@@ -145,12 +145,12 @@ function getDashboardData_() {
     generatedAt: new Date().toISOString(),
     spreadsheetId: spreadsheet.getId(),
     spreadsheetUrl: spreadsheet.getUrl(),
-    hero: getHeroData_(),
-    performance: getPerformanceData_(),
-    tasks: getTasks_(),
-    schedule: getScheduleData_(),
-    competitions: getCompetitionData_(),
-    employeeOfWeek: getEmployeeOfWeek_(),
+    hero: getHeroData_(spreadsheet),
+    performance: getPerformanceData_(spreadsheet),
+    tasks: getTasks_(spreadsheet),
+    schedule: getScheduleData_(spreadsheet),
+    competitions: getCompetitionData_(spreadsheet),
+    employeeOfWeek: getEmployeeOfWeek_(spreadsheet),
   };
 }
 
@@ -251,8 +251,8 @@ function styleSheet_(sheet, columnCount) {
   sheet.autoResizeColumns(1, columnCount);
 }
 
-function getHeroData_() {
-  const values = getOrCreateSpreadsheet_()
+function getHeroData_(spreadsheet) {
+  const values = spreadsheet
     .getSheetByName(APP_CONFIG.sheets.sales)
     .getDataRange()
     .getValues();
@@ -292,8 +292,8 @@ function getHeroData_() {
   };
 }
 
-function getPerformanceData_() {
-  const values = getOrCreateSpreadsheet_()
+function getPerformanceData_(spreadsheet) {
+  const values = spreadsheet
     .getSheetByName(APP_CONFIG.sheets.performance)
     .getDataRange()
     .getValues();
@@ -329,8 +329,8 @@ function getPerformanceData_() {
   };
 }
 
-function getTasks_() {
-  const values = getOrCreateSpreadsheet_()
+function getTasks_(spreadsheet) {
+  const values = (spreadsheet || getOrCreateSpreadsheet_())
     .getSheetByName(APP_CONFIG.sheets.tasks)
     .getDataRange()
     .getValues();
@@ -373,8 +373,8 @@ function getTasks_() {
   };
 }
 
-function getScheduleData_() {
-  const values = getOrCreateSpreadsheet_()
+function getScheduleData_(spreadsheet) {
+  const values = spreadsheet
     .getSheetByName(APP_CONFIG.sheets.schedule)
     .getDataRange()
     .getValues();
@@ -408,8 +408,8 @@ function getScheduleData_() {
   return base;
 }
 
-function getCompetitionData_() {
-  const values = getOrCreateSpreadsheet_()
+function getCompetitionData_(spreadsheet) {
+  const values = spreadsheet
     .getSheetByName(APP_CONFIG.sheets.competitions)
     .getDataRange()
     .getValues();
@@ -448,8 +448,8 @@ function getCompetitionData_() {
   };
 }
 
-function getEmployeeOfWeek_() {
-  const sheet = getOrCreateSpreadsheet_().getSheetByName(APP_CONFIG.sheets.employeeOfWeek);
+function getEmployeeOfWeek_(spreadsheet) {
+  const sheet = spreadsheet.getSheetByName(APP_CONFIG.sheets.employeeOfWeek);
   const row = sheet.getRange(2, 1, 1, 4);
   const values = row.getValues()[0] || [];
   const richText = row.getRichTextValues()[0] || [];

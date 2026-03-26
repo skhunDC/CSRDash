@@ -14,6 +14,8 @@
       loading: false,
       loadingStartedAt: 0,
       loadingTicker: null,
+      loadingEstimateMs: 0,
+      loadingCountdownMs: 0,
       isPrintMode: Boolean(window.CSR_DASHBOARD_PRINT_MODE),
       isPrintModalOpen: false,
       autoScrollHandles: Object.create(null),
@@ -494,17 +496,24 @@
     function startLoading(message) {
       state.loading = true;
       state.loadingStartedAt = Date.now();
+      state.loadingEstimateMs = getLoadingEstimateMs();
+      state.loadingCountdownMs = state.loadingEstimateMs;
       clearInterval(state.loadingTicker);
-      renderLoading(message, 0);
+      renderLoading(message, state.loadingCountdownMs);
       state.loadingTicker = setInterval(function() {
         updateLoadingTimer();
-      }, 100);
+      }, 250);
     }
 
     function stopLoading() {
+      if (state.loadingStartedAt) {
+        storeLoadingDuration(Date.now() - state.loadingStartedAt);
+      }
       state.loading = false;
       clearInterval(state.loadingTicker);
       state.loadingTicker = null;
+      state.loadingStartedAt = 0;
+      state.loadingCountdownMs = 0;
     }
 
     function updateLoadingTimer() {
@@ -513,20 +522,60 @@
         return;
       }
 
-      timerNode.textContent = 'Elapsed ' + formatLoadingDuration(Date.now() - state.loadingStartedAt);
+      const elapsedMs = Date.now() - state.loadingStartedAt;
+      const remainingMs = Math.max(1000, state.loadingEstimateMs - elapsedMs);
+      state.loadingCountdownMs = remainingMs;
+      timerNode.textContent = formatLoadingCountdown(remainingMs);
     }
 
-    function renderLoading(message, elapsedMs) {
+    function renderLoading(message, remainingMs) {
       root.innerHTML = `
         <div class="loading-state">
           <div class="loading-copy">
             <div class="eyebrow">Please wait</div>
             <h1 class="section-title">${escapeHtml(message)}</h1>
-            <p class="loading-timer" data-loading-timer>Elapsed ${formatLoadingDuration(elapsedMs)}</p>
+            <p class="loading-timer" data-loading-timer>${formatLoadingCountdown(remainingMs)}</p>
           </div>
           <div class="loading-spinner" aria-hidden="true"></div>
         </div>
       `;
+    }
+
+    function getLoadingEstimateMs() {
+      try {
+        const stored = Number(window.localStorage.getItem('csrDash.avgLoadMs'));
+        if (stored && isFinite(stored)) {
+          return clamp(stored, 2500, 20000);
+        }
+      } catch (error) {
+        return 6000;
+      }
+
+      return 6000;
+    }
+
+    function storeLoadingDuration(durationMs) {
+      if (!durationMs || !isFinite(durationMs)) {
+        return;
+      }
+
+      try {
+        const previous = Number(window.localStorage.getItem('csrDash.avgLoadMs'));
+        const base = previous && isFinite(previous) ? previous : durationMs;
+        const weightedAverage = Math.round((base * 0.65) + (durationMs * 0.35));
+        window.localStorage.setItem('csrDash.avgLoadMs', String(clamp(weightedAverage, 2500, 20000)));
+      } catch (error) {
+        return;
+      }
+    }
+
+    function formatLoadingCountdown(remainingMs) {
+      const totalSeconds = Math.max(1, Math.ceil((Number(remainingMs) || 0) / 1000));
+      return 'About ' + totalSeconds + 's remaining';
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
     }
 
     function renderError(message) {
