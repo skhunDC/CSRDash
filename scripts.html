@@ -152,6 +152,7 @@
         return;
       }
       panel.innerHTML = renderHero();
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="stores"]'), { speedPxPerSecond: 28 });
     }
 
     function updatePerformancePanel() {
@@ -160,6 +161,7 @@
         return;
       }
       panel.innerHTML = renderPerformance();
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="performance"]'), { speedPxPerSecond: 34 });
     }
 
     function updateTasksPanel(changedTaskName) {
@@ -170,6 +172,7 @@
       panel.innerHTML = renderTasks(changedTaskName);
       bindTaskEvents(panel);
       fitTasksPanel(panel);
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="tasks"]'), { speedPxPerSecond: 30 });
     }
 
     function updateSchedulePanel() {
@@ -187,6 +190,7 @@
       }
       panel.innerHTML = renderCompetitionModule();
       bindCompetitionEvents(panel);
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="competition"]'), { speedPxPerSecond: 30 });
     }
 
     function updateEmployeePanel() {
@@ -212,6 +216,7 @@
         });
       }
       bindCompetitionEvents(shell);
+      bindInfiniteTicker(shell.querySelector('[data-autoscroll="competition"]'), { speedPxPerSecond: 30 });
     }
 
     function renderHero() {
@@ -254,7 +259,8 @@
                 </div>
                 <span class="refresh-chip">Auto refresh every 60 sec</span>
               </div>
-              <div class="store-list">
+              <div class="store-list-viewport" data-autoscroll="stores">
+                <div class="store-list">
                 ${hero.stores.map(function(store) {
                   return `
                     <div class="store-row">
@@ -265,9 +271,11 @@
                     </div>
                   `;
                 }).join('')}
+                </div>
               </div>
             </div>
             <div class="hero-actions">
+              <span class="sheet-chip" title="Dashboard entry is intentionally public while sheet access remains permissioned.">Dashboard access is public</span>
               <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer" title="Google may prompt for sign-in and will only open the sheet for accounts the owner has permissioned.">Open source sheet</a>
               <button class="sheet-chip print-action" type="button" data-open-print-modal>Open print view</button>
 
@@ -286,7 +294,8 @@
             </div>
             <span class="refresh-chip">${escapeHtml(performance.dateLabel)}</span>
           </div>
-          <div class="performance-list">
+          <div class="performance-list-viewport" data-autoscroll="performance">
+            <div class="performance-list">
             ${performance.entries.map(function(entry) {
               const fill = topValue ? Math.round((entry.dollarsPerHour / topValue) * 100) : 0;
               return `
@@ -301,6 +310,7 @@
                 </div>
               `;
             }).join('') || '<div class="subtle-empty">Add rows to the CSR_Performance sheet for yesterday to populate this ranking.</div>'}
+            </div>
           </div>
       `;
     }
@@ -332,7 +342,7 @@
             </div>
             <div class="summary-bar"><span style="--fill:${tasks.summary.progressPercent}%"></span></div>
           </div>
-          <div class="task-list-viewport">
+          <div class="task-list-viewport" data-autoscroll="tasks">
             <div class="task-list">
               ${tasks.entries.map(function(entry) {
                 const changedClass = changedTaskName === entry.task ? 'changed' : '';
@@ -393,7 +403,8 @@
             return `<button class="tab-chip competition-tab-chip competition-tab-${slugify(tab)} ${tab === state.activeCompetitionTab ? 'active' : ''}" data-tab="${escapeAttribute(tab)}" aria-pressed="${String(tab === state.activeCompetitionTab)}">${escapeHtml(tab)}</button>`;
           }).join('')}
         </div>
-        <div class="competition-list">
+        <div class="competition-list-viewport" data-autoscroll="competition">
+          <div class="competition-list">
           ${activeRows.map(function(entry) {
             return `
               <div class="competition-row">
@@ -406,6 +417,7 @@
               </div>
             `;
           }).join('') || '<div class="subtle-empty">Add competition rows to the Competitions sheet for this tab.</div>'}
+          </div>
         </div>
       `;
     }
@@ -621,8 +633,6 @@
         { density: 'default', columns: 2 },
         { density: 'compact', columns: 2 },
         { density: 'compact', columns: 3 },
-        { density: 'micro', columns: 3 },
-        { density: 'micro', columns: 4 },
       ];
 
       let bestLayout = layouts[0];
@@ -646,11 +656,40 @@
       panel.dataset.taskDensity = bestLayout.density;
       panel.dataset.taskColumns = String(bestLayout.columns);
       taskList.style.transform = 'scale(1)';
+    }
 
-      const finalWidthScale = taskViewport.clientWidth / Math.max(taskList.scrollWidth, 1);
-      const finalHeightScale = taskViewport.clientHeight / Math.max(taskList.scrollHeight, 1);
-      const finalScale = Math.min(1, finalWidthScale, finalHeightScale);
-      taskList.style.transform = 'scale(' + finalScale + ')';
+    function bindInfiniteTicker(viewport, options) {
+      if (!viewport) {
+        return;
+      }
+
+      const list = viewport.firstElementChild;
+      if (!list) {
+        return;
+      }
+
+      viewport.classList.remove('is-ticker');
+      const contentHeight = list.scrollHeight;
+      const viewportHeight = viewport.clientHeight;
+      if (contentHeight <= viewportHeight + 8) {
+        return;
+      }
+
+      const clone = list.cloneNode(true);
+      clone.setAttribute('aria-hidden', 'true');
+
+      const track = document.createElement('div');
+      track.className = 'ticker-track';
+      track.appendChild(list);
+      track.appendChild(clone);
+
+      viewport.textContent = '';
+      viewport.appendChild(track);
+      viewport.classList.add('is-ticker');
+
+      const speedPxPerSecond = (options && options.speedPxPerSecond) || 32;
+      const durationSeconds = Math.max(contentHeight / Math.max(speedPxPerSecond, 1), 8);
+      track.style.setProperty('--ticker-duration', durationSeconds + 's');
     }
 
     function bindCompetitionEvents(scope) {
