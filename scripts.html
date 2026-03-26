@@ -16,6 +16,7 @@
       loadingTicker: null,
       isPrintMode: Boolean(window.CSR_DASHBOARD_PRINT_MODE),
       isPrintModalOpen: false,
+      autoScrollHandles: Object.create(null),
     };
 
     const root = document.getElementById(state.isPrintMode ? 'print-app' : 'app');
@@ -152,6 +153,7 @@
         return;
       }
       panel.innerHTML = renderHero();
+      bindAutoScroll(panel.querySelector('[data-autoscroll="stores"]'), { step: 1, intervalMs: 45, holdAtEdgeMs: 1400 });
     }
 
     function updatePerformancePanel() {
@@ -160,6 +162,7 @@
         return;
       }
       panel.innerHTML = renderPerformance();
+      bindAutoScroll(panel.querySelector('[data-autoscroll="performance"]'), { step: 1, intervalMs: 50, holdAtEdgeMs: 1500 });
     }
 
     function updateTasksPanel(changedTaskName) {
@@ -170,6 +173,7 @@
       panel.innerHTML = renderTasks(changedTaskName);
       bindTaskEvents(panel);
       fitTasksPanel(panel);
+      bindAutoScroll(panel.querySelector('[data-autoscroll="tasks"]'), { step: 1, intervalMs: 38, holdAtEdgeMs: 1300 });
     }
 
     function updateSchedulePanel() {
@@ -187,6 +191,7 @@
       }
       panel.innerHTML = renderCompetitionModule();
       bindCompetitionEvents(panel);
+      bindAutoScroll(panel.querySelector('[data-autoscroll="competition"]'), { step: 1, intervalMs: 55, holdAtEdgeMs: 1400 });
     }
 
     function updateEmployeePanel() {
@@ -212,6 +217,7 @@
         });
       }
       bindCompetitionEvents(shell);
+      bindAutoScroll(shell.querySelector('[data-autoscroll="competition"]'), { step: 1, intervalMs: 55, holdAtEdgeMs: 1400 });
     }
 
     function renderHero() {
@@ -254,7 +260,8 @@
                 </div>
                 <span class="refresh-chip">Auto refresh every 60 sec</span>
               </div>
-              <div class="store-list">
+              <div class="store-list-viewport" data-autoscroll="stores">
+                <div class="store-list">
                 ${hero.stores.map(function(store) {
                   return `
                     <div class="store-row">
@@ -265,9 +272,11 @@
                     </div>
                   `;
                 }).join('')}
+                </div>
               </div>
             </div>
             <div class="hero-actions">
+              <span class="sheet-chip" title="Dashboard entry is intentionally public while sheet access remains permissioned.">Dashboard access is public</span>
               <a class="sheet-chip" href="${escapeHtml(state.data.spreadsheetUrl)}" target="_blank" rel="noopener noreferrer" title="Google may prompt for sign-in and will only open the sheet for accounts the owner has permissioned.">Open source sheet</a>
               <button class="sheet-chip print-action" type="button" data-open-print-modal>Open print view</button>
 
@@ -286,7 +295,8 @@
             </div>
             <span class="refresh-chip">${escapeHtml(performance.dateLabel)}</span>
           </div>
-          <div class="performance-list">
+          <div class="performance-list-viewport" data-autoscroll="performance">
+            <div class="performance-list">
             ${performance.entries.map(function(entry) {
               const fill = topValue ? Math.round((entry.dollarsPerHour / topValue) * 100) : 0;
               return `
@@ -301,6 +311,7 @@
                 </div>
               `;
             }).join('') || '<div class="subtle-empty">Add rows to the CSR_Performance sheet for yesterday to populate this ranking.</div>'}
+            </div>
           </div>
       `;
     }
@@ -332,7 +343,7 @@
             </div>
             <div class="summary-bar"><span style="--fill:${tasks.summary.progressPercent}%"></span></div>
           </div>
-          <div class="task-list-viewport">
+          <div class="task-list-viewport" data-autoscroll="tasks">
             <div class="task-list">
               ${tasks.entries.map(function(entry) {
                 const changedClass = changedTaskName === entry.task ? 'changed' : '';
@@ -393,7 +404,8 @@
             return `<button class="tab-chip competition-tab-chip competition-tab-${slugify(tab)} ${tab === state.activeCompetitionTab ? 'active' : ''}" data-tab="${escapeAttribute(tab)}" aria-pressed="${String(tab === state.activeCompetitionTab)}">${escapeHtml(tab)}</button>`;
           }).join('')}
         </div>
-        <div class="competition-list">
+        <div class="competition-list-viewport" data-autoscroll="competition">
+          <div class="competition-list">
           ${activeRows.map(function(entry) {
             return `
               <div class="competition-row">
@@ -406,6 +418,7 @@
               </div>
             `;
           }).join('') || '<div class="subtle-empty">Add competition rows to the Competitions sheet for this tab.</div>'}
+          </div>
         </div>
       `;
     }
@@ -621,8 +634,6 @@
         { density: 'default', columns: 2 },
         { density: 'compact', columns: 2 },
         { density: 'compact', columns: 3 },
-        { density: 'micro', columns: 3 },
-        { density: 'micro', columns: 4 },
       ];
 
       let bestLayout = layouts[0];
@@ -646,11 +657,73 @@
       panel.dataset.taskDensity = bestLayout.density;
       panel.dataset.taskColumns = String(bestLayout.columns);
       taskList.style.transform = 'scale(1)';
+    }
 
-      const finalWidthScale = taskViewport.clientWidth / Math.max(taskList.scrollWidth, 1);
-      const finalHeightScale = taskViewport.clientHeight / Math.max(taskList.scrollHeight, 1);
-      const finalScale = Math.min(1, finalWidthScale, finalHeightScale);
-      taskList.style.transform = 'scale(' + finalScale + ')';
+    function bindAutoScroll(viewport, options) {
+      if (!viewport) {
+        return;
+      }
+
+      const key = viewport.getAttribute('data-autoscroll') || '';
+      if (!key) {
+        return;
+      }
+
+      clearAutoScroll(key);
+      viewport.scrollTop = 0;
+      const maxScrollTop = viewport.scrollHeight - viewport.clientHeight;
+      if (maxScrollTop <= 8) {
+        return;
+      }
+
+      const step = (options && options.step) || 1;
+      const intervalMs = (options && options.intervalMs) || 50;
+      const holdAtEdgeMs = (options && options.holdAtEdgeMs) || 1200;
+      const handle = {
+        direction: 1,
+        paused: false,
+        holdTimer: null,
+        ticker: null,
+      };
+
+      function runTick() {
+        if (handle.paused) {
+          return;
+        }
+
+        const limit = viewport.scrollHeight - viewport.clientHeight;
+        if (limit <= 0) {
+          return;
+        }
+
+        const next = viewport.scrollTop + (step * handle.direction);
+        const hitBottom = next >= limit;
+        const hitTop = next <= 0;
+
+        viewport.scrollTop = hitBottom ? limit : (hitTop ? 0 : next);
+
+        if (hitBottom || hitTop) {
+          handle.paused = true;
+          handle.holdTimer = setTimeout(function() {
+            handle.direction = hitBottom ? -1 : 1;
+            handle.paused = false;
+          }, holdAtEdgeMs);
+        }
+      }
+
+      handle.ticker = setInterval(runTick, intervalMs);
+      state.autoScrollHandles[key] = handle;
+    }
+
+    function clearAutoScroll(key) {
+      const handle = state.autoScrollHandles[key];
+      if (!handle) {
+        return;
+      }
+
+      clearInterval(handle.ticker);
+      clearTimeout(handle.holdTimer);
+      delete state.autoScrollHandles[key];
     }
 
     function bindCompetitionEvents(scope) {
