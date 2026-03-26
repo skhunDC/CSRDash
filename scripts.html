@@ -16,6 +16,7 @@
       loadingTicker: null,
       isPrintMode: Boolean(window.CSR_DASHBOARD_PRINT_MODE),
       isPrintModalOpen: false,
+      autoScrollHandles: Object.create(null),
     };
 
     const root = document.getElementById(state.isPrintMode ? 'print-app' : 'app');
