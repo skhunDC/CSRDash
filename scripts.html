@@ -153,7 +153,7 @@
         return;
       }
       panel.innerHTML = renderHero();
-      bindAutoScroll(panel.querySelector('[data-autoscroll="stores"]'), { step: 1, intervalMs: 45, holdAtEdgeMs: 1400 });
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="stores"]'), { speedPxPerSecond: 28 });
     }
 
     function updatePerformancePanel() {
@@ -162,7 +162,7 @@
         return;
       }
       panel.innerHTML = renderPerformance();
-      bindAutoScroll(panel.querySelector('[data-autoscroll="performance"]'), { step: 1, intervalMs: 50, holdAtEdgeMs: 1500 });
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="performance"]'), { speedPxPerSecond: 34 });
     }
 
     function updateTasksPanel(changedTaskName) {
@@ -173,7 +173,7 @@
       panel.innerHTML = renderTasks(changedTaskName);
       bindTaskEvents(panel);
       fitTasksPanel(panel);
-      bindAutoScroll(panel.querySelector('[data-autoscroll="tasks"]'), { step: 1, intervalMs: 38, holdAtEdgeMs: 1300 });
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="tasks"]'), { speedPxPerSecond: 30 });
     }
 
     function updateSchedulePanel() {
@@ -191,7 +191,7 @@
       }
       panel.innerHTML = renderCompetitionModule();
       bindCompetitionEvents(panel);
-      bindAutoScroll(panel.querySelector('[data-autoscroll="competition"]'), { step: 1, intervalMs: 55, holdAtEdgeMs: 1400 });
+      bindInfiniteTicker(panel.querySelector('[data-autoscroll="competition"]'), { speedPxPerSecond: 30 });
     }
 
     function updateEmployeePanel() {
@@ -217,7 +217,7 @@
         });
       }
       bindCompetitionEvents(shell);
-      bindAutoScroll(shell.querySelector('[data-autoscroll="competition"]'), { step: 1, intervalMs: 55, holdAtEdgeMs: 1400 });
+      bindInfiniteTicker(shell.querySelector('[data-autoscroll="competition"]'), { speedPxPerSecond: 30 });
     }
 
     function renderHero() {
@@ -659,71 +659,38 @@
       taskList.style.transform = 'scale(1)';
     }
 
-    function bindAutoScroll(viewport, options) {
+    function bindInfiniteTicker(viewport, options) {
       if (!viewport) {
         return;
       }
 
-      const key = viewport.getAttribute('data-autoscroll') || '';
-      if (!key) {
+      const list = viewport.firstElementChild;
+      if (!list) {
         return;
       }
 
-      clearAutoScroll(key);
-      viewport.scrollTop = 0;
-      const maxScrollTop = viewport.scrollHeight - viewport.clientHeight;
-      if (maxScrollTop <= 8) {
+      viewport.classList.remove('is-ticker');
+      const contentHeight = list.scrollHeight;
+      const viewportHeight = viewport.clientHeight;
+      if (contentHeight <= viewportHeight + 8) {
         return;
       }
 
-      const step = (options && options.step) || 1;
-      const intervalMs = (options && options.intervalMs) || 50;
-      const holdAtEdgeMs = (options && options.holdAtEdgeMs) || 1200;
-      const handle = {
-        direction: 1,
-        paused: false,
-        holdTimer: null,
-        ticker: null,
-      };
+      const clone = list.cloneNode(true);
+      clone.setAttribute('aria-hidden', 'true');
 
-      function runTick() {
-        if (handle.paused) {
-          return;
-        }
+      const track = document.createElement('div');
+      track.className = 'ticker-track';
+      track.appendChild(list);
+      track.appendChild(clone);
 
-        const limit = viewport.scrollHeight - viewport.clientHeight;
-        if (limit <= 0) {
-          return;
-        }
+      viewport.textContent = '';
+      viewport.appendChild(track);
+      viewport.classList.add('is-ticker');
 
-        const next = viewport.scrollTop + (step * handle.direction);
-        const hitBottom = next >= limit;
-        const hitTop = next <= 0;
-
-        viewport.scrollTop = hitBottom ? limit : (hitTop ? 0 : next);
-
-        if (hitBottom || hitTop) {
-          handle.paused = true;
-          handle.holdTimer = setTimeout(function() {
-            handle.direction = hitBottom ? -1 : 1;
-            handle.paused = false;
-          }, holdAtEdgeMs);
-        }
-      }
-
-      handle.ticker = setInterval(runTick, intervalMs);
-      state.autoScrollHandles[key] = handle;
-    }
-
-    function clearAutoScroll(key) {
-      const handle = state.autoScrollHandles[key];
-      if (!handle) {
-        return;
-      }
-
-      clearInterval(handle.ticker);
-      clearTimeout(handle.holdTimer);
-      delete state.autoScrollHandles[key];
+      const speedPxPerSecond = (options && options.speedPxPerSecond) || 32;
+      const durationSeconds = Math.max(contentHeight / Math.max(speedPxPerSecond, 1), 8);
+      track.style.setProperty('--ticker-duration', durationSeconds + 's');
     }
 
     function bindCompetitionEvents(scope) {

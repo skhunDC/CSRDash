@@ -432,6 +432,7 @@
     align-items: flex-start;
     justify-content: flex-start;
     scrollbar-width: none;
+    position: relative;
   }
 
   .task-list-viewport::-webkit-scrollbar {
@@ -727,8 +728,9 @@
   .performance-list-viewport,
   .competition-list-viewport {
     min-height: 0;
-    overflow: auto;
+    overflow: hidden;
     scrollbar-width: none;
+    position: relative;
   }
 
   .store-list-viewport {
@@ -745,6 +747,54 @@
   .competition-list-viewport::-webkit-scrollbar {
     width: 0;
     height: 0;
+  }
+
+  .task-list-viewport.is-ticker::before,
+  .task-list-viewport.is-ticker::after,
+  .store-list-viewport.is-ticker::before,
+  .store-list-viewport.is-ticker::after,
+  .performance-list-viewport.is-ticker::before,
+  .performance-list-viewport.is-ticker::after,
+  .competition-list-viewport.is-ticker::before,
+  .competition-list-viewport.is-ticker::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 34px;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  .task-list-viewport.is-ticker::before,
+  .store-list-viewport.is-ticker::before,
+  .performance-list-viewport.is-ticker::before,
+  .competition-list-viewport.is-ticker::before {
+    top: 0;
+    background: linear-gradient(180deg, rgba(6, 20, 31, 0.95), rgba(6, 20, 31, 0));
+  }
+
+  .task-list-viewport.is-ticker::after,
+  .store-list-viewport.is-ticker::after,
+  .performance-list-viewport.is-ticker::after,
+  .competition-list-viewport.is-ticker::after {
+    bottom: 0;
+    background: linear-gradient(0deg, rgba(6, 20, 31, 0.95), rgba(6, 20, 31, 0));
+  }
+
+  .ticker-track {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    animation: ticker-scroll var(--ticker-duration, 26s) linear infinite;
+    will-change: transform;
+  }
+
+  .task-list-viewport.is-ticker:hover .ticker-track,
+  .store-list-viewport.is-ticker:hover .ticker-track,
+  .performance-list-viewport.is-ticker:hover .ticker-track,
+  .competition-list-viewport.is-ticker:hover .ticker-track {
+    animation-play-state: paused;
   }
 
   .competition-module-animate .competition-list,
@@ -1068,6 +1118,11 @@
   @keyframes competition-swap {
     from { opacity: 0.7; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes ticker-scroll {
+    from { transform: translateY(0); }
+    to { transform: translateY(-50%); }
   }
 
   @media print {

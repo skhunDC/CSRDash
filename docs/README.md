@@ -158,3 +158,13 @@ npm test
 - The app tries They Said So management quote of the day first, then falls back to ZenQuotes if needed.
 - The response is cached in Apps Script properties/cache for the current date so the TV refresh cycle does not repeatedly call the external API.
 - If both APIs are unavailable, the `Employee_Of_Week` sheet `Quote` cell is used as the on-screen fallback.
+
+## Infinite list ticker in Google Apps Script HTMLService
+Because this project runs in Google Apps Script HTMLService (no React build step), ticker behavior is implemented directly in `scripts.html` + `styles.html`:
+- each overflow list viewport is wrapped with a `.ticker-track`
+- the original list is duplicated with DOM cloning
+- track animates `translateY(0)` to `translateY(-50%)` with linear timing
+- hover pauses animation
+- top and bottom fade overlays are applied with pseudo-elements
+
+This keeps the behavior seamless and deployment-safe for the current GAS environment without introducing `.jsx`/bundling requirements.
