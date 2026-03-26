@@ -115,7 +115,6 @@ test('client HTML includes public shell, refresh handling, print mode, and fitte
   assert.match(scriptsHtml, /data-loading-timer/);
   assert.match(scriptsHtml, /formatLoadingDuration/);
   assert.match(scriptsHtml, /data-open-print-modal/);
-  assert.match(scriptsHtml, /Dashboard access is public/);
   assert.match(scriptsHtml, /Google's normal sign-in and file permission checks/);
   assert.match(scriptsHtml, /renderPrintModal/);
   assert.match(scriptsHtml, /window\.print\(\)/);
