@@ -157,7 +157,9 @@
   }
 
   .metric-block {
-    padding: 18px;
+    container-type: inline-size;
+    min-width: 0;
+    padding: clamp(14px, 1vw, 18px);
     border-radius: var(--radius-lg);
     background: linear-gradient(180deg, rgba(18, 54, 80, 0.84), rgba(10, 31, 49, 0.74));
     border: 1px solid rgba(145, 207, 255, 0.12);
@@ -183,14 +185,33 @@
   }
 
   .metric-value {
-    font-size: 2.2rem;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(1.35rem, 1.65vw, 2.2rem);
+    font-size: clamp(1.35rem, 18cqw, 2.2rem);
     line-height: 1;
+    letter-spacing: -0.045em;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
     margin-bottom: 8px;
   }
 
   .metric-subtle {
     color: var(--text-muted);
     font-size: 0.94rem;
+  }
+
+  @container (max-width: 130px) {
+    .metric-label {
+      font-size: 0.68rem;
+      letter-spacing: 0.16em;
+      margin-bottom: 10px;
+    }
+
+    .metric-subtle {
+      font-size: 0.84rem;
+      line-height: 1.25;
+    }
   }
 
   .delta-positive {
