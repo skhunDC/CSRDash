@@ -373,17 +373,21 @@
 
     function renderScheduleModule() {
       const schedule = state.data.schedule;
+      const days = Array.isArray(schedule.days) ? schedule.days : [];
 
       return `
         <div class="section-head">
           <div>
             <h2 class="section-title">Schedule Snapshot</h2>
-            <div class="section-copy">Who is off today and tomorrow.</div>
+            <div class="section-copy">Who is off across all scheduled dates from the sheet.</div>
           </div>
         </div>
-        <div class="schedule-days">
-          ${renderScheduleDay('Today', schedule.today.off)}
-          ${renderScheduleDay('Tomorrow', schedule.tomorrow.off)}
+        <div class="schedule-days schedule-days-viewport">
+          ${days.length
+            ? days.map(function(day) {
+              return renderScheduleDay(day.label, day.off);
+            }).join('')
+            : '<div class="subtle-empty">No OFF schedule entries were found.</div>'}
         </div>
       `;
     }

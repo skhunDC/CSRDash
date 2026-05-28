@@ -378,13 +378,7 @@ function getScheduleData_(spreadsheet) {
     .getSheetByName(APP_CONFIG.sheets.schedule)
     .getDataRange()
     .getValues();
-  const today = formatDateKey_(new Date());
-  const tomorrow = formatDateKey_(shiftDate_(new Date(), 1));
-
-  const base = {
-    today: { label: 'Today', off: [] },
-    tomorrow: { label: 'Tomorrow', off: [] },
-  };
+  const daysByDate = {};
 
   values.slice(1).forEach(function(row) {
     if (!row[0] || String(row[2]).toUpperCase() !== 'OFF') {
@@ -392,20 +386,27 @@ function getScheduleData_(spreadsheet) {
     }
 
     const dateKey = formatDateKey_(row[0]);
-    const entry = {
+    if (!daysByDate[dateKey]) {
+      daysByDate[dateKey] = {
+        dateKey,
+        label: formatDisplayDate_(row[0]),
+        off: [],
+      };
+    }
+
+    daysByDate[dateKey].off.push({
       csr: row[1],
       notes: row[3] || '',
-    };
-
-    if (dateKey === today) {
-      base.today.off.push(entry);
-    }
-    if (dateKey === tomorrow) {
-      base.tomorrow.off.push(entry);
-    }
+    });
   });
 
-  return base;
+  const days = Object.keys(daysByDate)
+    .sort()
+    .map(function(dateKey) {
+      return daysByDate[dateKey];
+    });
+
+  return { days };
 }
 
 function getCompetitionData_(spreadsheet) {
